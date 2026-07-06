@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { createClient } from 'genlayer-js';
+import { createClient, createAccount } from 'genlayer-js';
 import { ShieldAlert, Send, Gavel, Scale, Loader2, Link } from 'lucide-react';
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x205c232aC6fbD5e579C8b8bB763a46bF11a097Ed';
 
-// Khởi tạo GenLayer Client kết nối tới Studionet
+const account = createAccount('0x1111111111111111111111111111111111111111111111111111111111111111');
 const client = createClient({
   endpoint: '/api/rpc',
+  account: account,
 });
 
 function App() {
