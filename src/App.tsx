@@ -29,7 +29,7 @@ function App() {
         address: CONTRACT_ADDRESS,
         functionName: 'create_dispute',
         args: [
-          '0xHostAddress000000000000000000000000000000', // Mock Host Address
+          '0x1234567890123456789012345678901234567890', // Mock Host Address
           rulesUrl
         ],
         value: 100n // Mock deposit amount (100)
