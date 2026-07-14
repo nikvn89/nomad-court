@@ -52,8 +52,9 @@ function App() {
       for (let attempt = 0; attempt < 6; attempt++) {
         await new Promise(r => setTimeout(r, 4000)); // Wait 4s per attempt to allow block confirmation
         
-        // Guess backwards from 50 down to 1 to find the latest dispute created by this guest
-        for (let guessId = 50; guessId >= 1; guessId--) {
+        // Scan IDs 30 down to 1 in parallel to be fast!
+        const checkIds = Array.from({length: 30}, (_, i) => 30 - i);
+        const promises = checkIds.map(async (guessId) => {
           try {
             const res = await readClient.readContract({
               address: CONTRACT_ADDRESS,
@@ -61,16 +62,25 @@ function App() {
               args: [guessId.toString()]
             });
             const d = JSON.parse(res.result);
-            if (d.status === 'OPEN' && d.guest && d.guest.toLowerCase() === guestAccount.address.toLowerCase()) {
-              newId = guessId.toString();
-              break; // Found the latest one!
+            const cleanGuest = d.guest.toLowerCase().replace('0x', '');
+            const cleanLocal = guestAccount.address.toLowerCase().replace('0x', '');
+            
+            if (d.status === 'OPEN' && cleanGuest.includes(cleanLocal)) {
+              return guessId.toString();
             }
           } catch (e) {
             // ignore
           }
-        }
+          return null;
+        });
         
-        if (newId) break;
+        const results = await Promise.all(promises);
+        const found = results.filter(Boolean);
+        
+        if (found.length > 0) {
+          newId = found[0]; // first one in the array is the highest ID
+          break;
+        }
       }
       
       if (newId) {
