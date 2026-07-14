@@ -57,12 +57,10 @@ function App() {
       // 2. Derive dispute ID from on-chain state (Confirmed Path)
       let newId = '';
       
-      // Wait 8 seconds to guarantee block confirmation (GenVM StudioNet is slow)
-      await new Promise(r => setTimeout(r, 8000)); 
+      // Wait 10 seconds to guarantee block confirmation (GenVM StudioNet is slow)
+      await new Promise(r => setTimeout(r, 10000)); 
       
-      // We scan the last 20 IDs in parallel to bypass the Python str(Address) dictionary key mismatch
-      // This is exactly 20 requests ONCE, so it won't hit the 500/hr rate limit.
-      const checkIds = Array.from({length: 20}, (_, i) => 20 - i);
+      const checkIds = Array.from({length: 50}, (_, i) => 50 - i);
       const promises = checkIds.map(async (guessId) => {
         try {
           const res = await readClient.readContract({
@@ -71,8 +69,8 @@ function App() {
             args: [guessId.toString()]
           });
           const rawData = res.result ? res.result : res;
-          const d = JSON.parse(rawData);
-          const cleanGuest = d.guest.toLowerCase().replace('0x', '');
+          const d = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+          const cleanGuest = d.guest ? d.guest.toLowerCase().replace('0x', '') : '';
           const cleanLocal = guestAccount.address.toLowerCase().replace('0x', '');
           
           if (d.status === 'OPEN' && cleanGuest.includes(cleanLocal)) {
@@ -147,8 +145,8 @@ function App() {
         args: [id]
       });
       const rawData = res.result ? res.result : res;
-      const data = JSON.parse(rawData);
-      if (data.status) {
+      const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      if (data && data.status) {
         setDisputeData(data);
       } else {
         setDisputeData(null);
