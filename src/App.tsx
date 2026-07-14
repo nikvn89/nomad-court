@@ -36,6 +36,9 @@ function App() {
       return;
     }
     
+    setLoading(true);
+    setStatusMsg('Creating dispute on GenLayer... Waiting for transaction confirmation.');
+    try {
       let txRes: any;
       try {
         txRes = await guestClient.writeContract({
