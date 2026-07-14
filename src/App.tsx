@@ -59,34 +59,20 @@ function App() {
       for (let attempt = 0; attempt < 6; attempt++) {
         await new Promise(r => setTimeout(r, 4000)); 
         
-        const checkIds = Array.from({length: 30}, (_, i) => 30 - i);
-        const promises = checkIds.map(async (guessId) => {
-          try {
-            const res = await readClient.readContract({
-              address: CONTRACT_ADDRESS,
-              functionName: 'get_dispute',
-              args: [guessId.toString()]
-            });
-            const rawData = res.result ? res.result : res;
-            const d = JSON.parse(rawData);
-            const cleanGuest = d.guest.toLowerCase().replace('0x', '');
-            const cleanLocal = guestAccount.address.toLowerCase().replace('0x', '');
-            
-            if (d.status === 'OPEN' && cleanGuest.includes(cleanLocal)) {
-              return guessId.toString();
-            }
-          } catch (e) {
-            // ignore
+        try {
+          const res = await readClient.readContract({
+            address: CONTRACT_ADDRESS,
+            functionName: 'get_guest_latest_dispute',
+            args: [guestAccount.address]
+          });
+          const rawData = res.result ? res.result : res;
+          // rawData should be a string like "1" or ""
+          if (rawData && rawData.toString().trim() !== "") {
+              newId = rawData.toString().replace(/['"]/g, ''); // remove quotes if any
+              break;
           }
-          return null;
-        });
-        
-        const results = await Promise.all(promises);
-        const found = results.filter(Boolean);
-        
-        if (found.length > 0) {
-          newId = found[0];
-          break;
+        } catch (e) {
+          // ignore
         }
       }
       
