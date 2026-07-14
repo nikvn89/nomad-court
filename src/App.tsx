@@ -56,24 +56,39 @@ function App() {
       
       // 2. Derive dispute ID from on-chain state (Confirmed Path)
       let newId = '';
-      for (let attempt = 0; attempt < 6; attempt++) {
-        await new Promise(r => setTimeout(r, 4000)); 
-        
+      
+      // Wait 8 seconds to guarantee block confirmation (GenVM StudioNet is slow)
+      await new Promise(r => setTimeout(r, 8000)); 
+      
+      // We scan the last 20 IDs in parallel to bypass the Python str(Address) dictionary key mismatch
+      // This is exactly 20 requests ONCE, so it won't hit the 500/hr rate limit.
+      const checkIds = Array.from({length: 20}, (_, i) => 20 - i);
+      const promises = checkIds.map(async (guessId) => {
         try {
           const res = await readClient.readContract({
             address: CONTRACT_ADDRESS,
-            functionName: 'get_guest_latest_dispute',
-            args: [guestAccount.address]
+            functionName: 'get_dispute',
+            args: [guessId.toString()]
           });
           const rawData = res.result ? res.result : res;
-          // rawData should be a string like "1" or ""
-          if (rawData && rawData.toString().trim() !== "") {
-              newId = rawData.toString().replace(/['"]/g, ''); // remove quotes if any
-              break;
+          const d = JSON.parse(rawData);
+          const cleanGuest = d.guest.toLowerCase().replace('0x', '');
+          const cleanLocal = guestAccount.address.toLowerCase().replace('0x', '');
+          
+          if (d.status === 'OPEN' && cleanGuest.includes(cleanLocal)) {
+            return guessId.toString();
           }
         } catch (e) {
           // ignore
         }
+        return null;
+      });
+      
+      const results = await Promise.all(promises);
+      const found = results.filter(Boolean);
+      
+      if (found.length > 0) {
+        newId = found[0]; // first one in the array is the highest ID
       }
       
       if (newId) {
