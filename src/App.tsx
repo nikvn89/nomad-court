@@ -1,20 +1,29 @@
 import React, { useState } from 'react';
 import { createClient, createAccount } from 'genlayer-js';
-import { ShieldAlert, Send, Gavel, Scale, Loader2, Link } from 'lucide-react';
+import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User } from 'lucide-react';
+import './index.css';
 
-const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x205c232aC6fbD5e579C8b8bB763a46bF11a097Ed';
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x65eC86D2926b58898613af185fB6CbFDd845C332';
 
-const account = createAccount('0x1111111111111111111111111111111111111111111111111111111111111111');
-const client = createClient({
-  endpoint: '/api/rpc',
-  account: account,
-});
+// Mock test accounts for Host and Guest
+const HOST_PK = '0x1111111111111111111111111111111111111111111111111111111111111111';
+const GUEST_PK = '0x2222222222222222222222222222222222222222222222222222222222222222';
+const hostAccount = createAccount(HOST_PK);
+const guestAccount = createAccount(GUEST_PK);
+
+// Clients with different signers
+const hostClient = createClient({ endpoint: '/api/rpc', account: hostAccount });
+const guestClient = createClient({ endpoint: '/api/rpc', account: guestAccount });
+const readClient = createClient({ endpoint: '/api/rpc' });
 
 function App() {
+  const [activeRole, setActiveRole] = useState<'GUEST' | 'HOST'>('GUEST');
+  const activeClient = activeRole === 'GUEST' ? guestClient : hostClient;
+  const activeAccount = activeRole === 'GUEST' ? guestAccount : hostAccount;
+
   const [disputeId, setDisputeId] = useState('');
   const [rulesUrl, setRulesUrl] = useState('');
-  const [hostUrl, setHostUrl] = useState('');
-  const [guestUrl, setGuestUrl] = useState('');
+  const [evidenceUrl, setEvidenceUrl] = useState('');
   
   const [disputeData, setDisputeData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -22,24 +31,39 @@ function App() {
 
   const handleCreateDispute = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (activeRole !== 'GUEST') {
+      setStatusMsg('Only the Guest can create a new dispute.');
+      return;
+    }
+    
     setLoading(true);
-    setStatusMsg('Creating dispute on GenLayer...');
+    setStatusMsg('Creating dispute on GenLayer... Waiting for transaction confirmation.');
     try {
-      // Gọi public.write function 'create_dispute'
-      const res = await client.writeContract({
+      // 1. Dispatch transaction
+      await guestClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_dispute',
-        args: [
-          '0xHostAddress000000000000000000000000000000', // Mock Host Address
-          rulesUrl
-        ],
+        args: [hostAccount.address, rulesUrl],
         value: 100n // Mock deposit amount (100)
       });
       
-      const newId = res.result; // Trả về Dispute ID từ Smart Contract
-      setDisputeId(newId);
-      setStatusMsg(`Dispute created successfully! ID: ${newId}`);
-      await fetchDispute(newId);
+      // 2. Derive dispute ID from on-chain state (Confirmed Path)
+      // Note: In a real app we might poll for receipt, here we just query state after wait
+      await new Promise(r => setTimeout(r, 2000)); // Artificial wait for tx processing
+      const res = await readClient.readContract({
+        address: CONTRACT_ADDRESS,
+        functionName: 'get_guest_latest_dispute',
+        args: [guestAccount.address]
+      });
+      
+      const newId = res.result;
+      if (newId) {
+        setDisputeId(newId);
+        setStatusMsg(`Dispute created successfully! Confirmed ID: ${newId}`);
+        await fetchDispute(newId);
+      } else {
+        setStatusMsg('Dispute created, but could not derive ID from state yet.');
+      }
     } catch (err: any) {
       setStatusMsg(`Error: ${err.message}`);
     }
@@ -49,12 +73,12 @@ function App() {
   const handleSubmitEvidence = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setStatusMsg('Submitting evidence...');
+    setStatusMsg(`Submitting evidence as ${activeRole}...`);
     try {
-      await client.writeContract({
+      await activeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'submit_evidence',
-        args: [disputeId, hostUrl, guestUrl]
+        args: [disputeId, evidenceUrl] // Smart contract validates role restrictions
       });
       setStatusMsg('Evidence submitted successfully!');
       await fetchDispute(disputeId);
@@ -66,14 +90,14 @@ function App() {
 
   const handleResolve = async () => {
     setLoading(true);
-    setStatusMsg('AI Jury is reading evidence and calculating consensus...');
+    setStatusMsg('AI Jury is analyzing evidence & rules...');
     try {
-      await client.writeContract({
+      await activeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'resolve_dispute',
         args: [disputeId]
       });
-      setStatusMsg('Dispute resolved! AI Verdict reached.');
+      setStatusMsg('Dispute resolved & funds distributed atomically!');
       await fetchDispute(disputeId);
     } catch (err: any) {
       setStatusMsg(`Error: ${err.message}`);
@@ -83,7 +107,7 @@ function App() {
 
   const fetchDispute = async (id: string) => {
     try {
-      const res = await client.readContract({
+      const res = await readClient.readContract({
         address: CONTRACT_ADDRESS,
         functionName: 'get_dispute',
         args: [id]
@@ -91,6 +115,8 @@ function App() {
       const data = JSON.parse(res.result);
       if (data.status) {
         setDisputeData(data);
+      } else {
+        setDisputeData(null);
       }
     } catch (err) {
       console.log('Not found');
@@ -100,7 +126,7 @@ function App() {
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-8 py-12">
       
-      {/* Header */}
+      {/* Header & Role Switcher */}
       <div className="text-center space-y-4">
         <div className="inline-flex items-center justify-center p-4 bg-purple-500/10 rounded-full border border-purple-500/20 mb-4">
           <Scale className="w-12 h-12 text-purple-400" />
@@ -108,9 +134,23 @@ function App() {
         <h1 className="text-5xl font-black tracking-tight bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
           NomadCourt
         </h1>
-        <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-          Decentralized Airbnb Dispute Resolution powered by GenLayer's Non-deterministic AI Execution.
-        </p>
+        
+        {/* Mock Wallet/Role Switcher */}
+        <div className="flex items-center justify-center gap-4 mt-6">
+          <button 
+            onClick={() => setActiveRole('GUEST')}
+            className={`px-4 py-2 rounded-full font-bold flex items-center gap-2 border ${activeRole === 'GUEST' ? 'bg-cyan-500 text-black border-cyan-500' : 'bg-transparent text-cyan-500 border-cyan-500/50'}`}>
+            <User className="w-4 h-4" /> Guest View
+          </button>
+          <button 
+            onClick={() => setActiveRole('HOST')}
+            className={`px-4 py-2 rounded-full font-bold flex items-center gap-2 border ${activeRole === 'HOST' ? 'bg-purple-500 text-white border-purple-500' : 'bg-transparent text-purple-500 border-purple-500/50'}`}>
+            <User className="w-4 h-4" /> Host View
+          </button>
+        </div>
+        <div className="text-xs text-gray-500 font-mono">
+          Active Address: {activeAccount.address}
+        </div>
       </div>
 
       {statusMsg && (
@@ -124,20 +164,20 @@ function App() {
         
         {/* Left Column: Actions */}
         <div className="space-y-6">
-          <div className="glass-panel p-6 space-y-4">
+          <div className={`glass-panel p-6 space-y-4 ${activeRole !== 'GUEST' && 'opacity-50 pointer-events-none'}`}>
             <h2 className="text-xl font-bold flex items-center gap-2">
               <ShieldAlert className="w-5 h-5 text-cyan-400" /> 
-              1. Open New Dispute
+              1. Open New Dispute (Guest Only)
             </h2>
             <form onSubmit={handleCreateDispute} className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">House Rules URL (Text/Doc)</label>
+                <label className="block text-sm text-gray-400 mb-1">House Rules URL</label>
                 <div className="relative">
                   <Link className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
                   <input 
                     type="url" required value={rulesUrl} onChange={e => setRulesUrl(e.target.value)}
                     className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 pl-10 pr-4 focus:ring-2 focus:ring-cyan-500 outline-none transition-all"
-                    placeholder="https://example.com/rules.txt"
+                    placeholder="https://en.wikipedia.org/wiki/Etiquette"
                   />
                 </div>
               </div>
@@ -147,7 +187,7 @@ function App() {
             </form>
           </div>
 
-          <div className="glass-panel p-6 space-y-4 opacity-75 focus-within:opacity-100 transition-opacity">
+          <div className="glass-panel p-6 space-y-4">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <Send className="w-5 h-5 text-purple-400" /> 
               2. Submit Evidence
@@ -156,29 +196,21 @@ function App() {
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Dispute ID</label>
                 <input 
-                  type="text" required value={disputeId} onChange={e => setDisputeId(e.target.value)}
+                  type="text" required value={disputeId} onChange={e => {setDisputeId(e.target.value); fetchDispute(e.target.value);}}
                   className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4 focus:ring-2 focus:ring-purple-500 outline-none"
                   placeholder="e.g. 1"
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Host Evidence URL</label>
+                <label className="block text-sm text-gray-400 mb-1">Your Evidence URL (As {activeRole})</label>
                 <input 
-                  type="url" required value={hostUrl} onChange={e => setHostUrl(e.target.value)}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4 focus:ring-2 focus:ring-purple-500 outline-none"
-                  placeholder="https://..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Guest Evidence URL</label>
-                <input 
-                  type="url" required value={guestUrl} onChange={e => setGuestUrl(e.target.value)}
+                  type="url" required value={evidenceUrl} onChange={e => setEvidenceUrl(e.target.value)}
                   className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4 focus:ring-2 focus:ring-purple-500 outline-none"
                   placeholder="https://..."
                 />
               </div>
               <button disabled={loading || !disputeId} type="submit" className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 rounded-lg transition-colors">
-                Attach to Case
+                Attach Evidence
               </button>
             </form>
           </div>
@@ -202,6 +234,15 @@ function App() {
                 </span>
               </div>
               
+              <div className="space-y-2 text-sm text-gray-400 border-b border-gray-800 pb-4">
+                <div className="truncate"><span className="text-purple-400 font-bold">Host:</span> {disputeData.host}</div>
+                <div className="truncate"><span className="text-cyan-400 font-bold">Guest:</span> {disputeData.guest}</div>
+                <div className="text-xs mt-2">
+                  <span className="text-gray-500">Host Evid: </span>{disputeData.host_evidence_url ? '✅ Submitted' : '❌ Pending'}<br/>
+                  <span className="text-gray-500">Guest Evid: </span>{disputeData.guest_evidence_url ? '✅ Submitted' : '❌ Pending'}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800">
                   <div className="text-sm text-gray-400 mb-1">Host Payout</div>
@@ -239,7 +280,6 @@ function App() {
             </div>
           )}
         </div>
-
       </div>
     </div>
   );
