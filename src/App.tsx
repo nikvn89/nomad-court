@@ -67,7 +67,8 @@ function App() {
               functionName: 'get_dispute',
               args: [guessId.toString()]
             });
-            const d = JSON.parse(res.result);
+            const rawData = res.result ? res.result : res;
+            const d = JSON.parse(rawData);
             const cleanGuest = d.guest.toLowerCase().replace('0x', '');
             const cleanLocal = guestAccount.address.toLowerCase().replace('0x', '');
             
@@ -144,7 +145,8 @@ function App() {
         functionName: 'get_dispute',
         args: [id]
       });
-      const data = JSON.parse(res.result);
+      const rawData = res.result ? res.result : res;
+      const data = JSON.parse(rawData);
       if (data.status) {
         setDisputeData(data);
       } else {
