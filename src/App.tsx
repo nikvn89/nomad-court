@@ -48,21 +48,31 @@ function App() {
       });
       
       // 2. Derive dispute ID from on-chain state (Confirmed Path)
-      // Note: In a real app we might poll for receipt, here we just query state after wait
-      await new Promise(r => setTimeout(r, 2000)); // Artificial wait for tx processing
-      const res = await readClient.readContract({
-        address: CONTRACT_ADDRESS,
-        functionName: 'get_guest_latest_dispute',
-        args: [guestAccount.address]
-      });
+      // Since GenLayer StudioNet takes a few seconds to reach consensus, we poll the state.
+      let newId = '';
+      for (let i = 0; i < 6; i++) {
+        await new Promise(r => setTimeout(r, 3000)); // Wait 3s per attempt
+        try {
+          const res = await readClient.readContract({
+            address: CONTRACT_ADDRESS,
+            functionName: 'get_guest_latest_dispute',
+            args: [guestAccount.address]
+          });
+          if (res && res.result) {
+            newId = res.result;
+            break;
+          }
+        } catch (e) {
+          // ignore read errors during polling
+        }
+      }
       
-      const newId = res.result;
       if (newId) {
         setDisputeId(newId);
         setStatusMsg(`Dispute created successfully! Confirmed ID: ${newId}`);
         await fetchDispute(newId);
       } else {
-        setStatusMsg('Dispute created, but could not derive ID from state yet.');
+        setStatusMsg('Dispute created, but could not derive ID from state yet. Network might be slow.');
       }
     } catch (err: any) {
       setStatusMsg(`Error: ${err.message}`);
