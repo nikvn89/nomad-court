@@ -49,22 +49,29 @@ function App() {
       
       // 2. Derive dispute ID from on-chain state (Confirmed Path)
       // Since GenLayer StudioNet takes a few seconds to reach consensus, we poll the state.
+      // To avoid dictionary key mismatch issues in python, we verify by querying the disputes directly.
       let newId = '';
-      for (let i = 0; i < 6; i++) {
+      for (let attempt = 0; attempt < 6; attempt++) {
         await new Promise(r => setTimeout(r, 3000)); // Wait 3s per attempt
-        try {
-          const res = await readClient.readContract({
-            address: CONTRACT_ADDRESS,
-            functionName: 'get_guest_latest_dispute',
-            args: [guestAccount.address]
-          });
-          if (res && res.result) {
-            newId = res.result;
-            break;
+        
+        for (let guessId = 1; guessId <= 10; guessId++) {
+          try {
+            const res = await readClient.readContract({
+              address: CONTRACT_ADDRESS,
+              functionName: 'get_dispute',
+              args: [guessId.toString()]
+            });
+            const d = JSON.parse(res.result);
+            // Check if this dispute belongs to our guest account
+            if (d.status === 'OPEN' && d.guest.toLowerCase() === guestAccount.address.toLowerCase()) {
+              newId = guessId.toString(); // Found our confirmed dispute!
+            }
+          } catch (e) {
+            // ignore
           }
-        } catch (e) {
-          // ignore read errors during polling
         }
+        
+        if (newId) break;
       }
       
       if (newId) {
