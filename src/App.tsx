@@ -36,23 +36,26 @@ function App() {
       return;
     }
     
-    setLoading(true);
-    setStatusMsg('Creating dispute on GenLayer... Waiting for transaction confirmation.');
-    try {
-      // 1. Dispatch transaction
-      const res = await guestClient.writeContract({
-        address: CONTRACT_ADDRESS,
-        functionName: 'create_dispute',
-        args: [hostAccount.address, rulesUrl],
-        value: 0n
-      });
+      let txRes: any;
+      try {
+        txRes = await guestClient.writeContract({
+          address: CONTRACT_ADDRESS,
+          functionName: 'create_dispute',
+          args: [hostAccount.address, rulesUrl]
+        });
+      } catch (e: any) {
+        setStatusMsg(`TX Reverted: ${e.message}`);
+        setLoading(false);
+        return;
+      }
+      
+      let debugMsg = txRes ? JSON.stringify(txRes).substring(0, 50) : 'No TX';
       
       // 2. Derive dispute ID from on-chain state (Confirmed Path)
       let newId = '';
       for (let attempt = 0; attempt < 6; attempt++) {
-        await new Promise(r => setTimeout(r, 4000)); // Wait 4s per attempt to allow block confirmation
+        await new Promise(r => setTimeout(r, 4000)); 
         
-        // Scan IDs 30 down to 1 in parallel to be fast!
         const checkIds = Array.from({length: 30}, (_, i) => 30 - i);
         const promises = checkIds.map(async (guessId) => {
           try {
@@ -78,7 +81,7 @@ function App() {
         const found = results.filter(Boolean);
         
         if (found.length > 0) {
-          newId = found[0]; // first one in the array is the highest ID
+          newId = found[0];
           break;
         }
       }
@@ -88,7 +91,7 @@ function App() {
         setStatusMsg(`Dispute created successfully! Confirmed ID: ${newId}`);
         await fetchDispute(newId);
       } else {
-        setStatusMsg('Dispute created, but could not derive ID from state yet. Network might be slow.');
+        setStatusMsg(`Could not derive ID. TX: ${debugMsg}`);
       }
     } catch (err: any) {
       setStatusMsg(`Error: ${err.message}`);
