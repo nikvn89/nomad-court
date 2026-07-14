@@ -47,20 +47,30 @@ function App() {
         value: 0n
       });
       
-      // Wait for block confirmation
-      await new Promise(r => setTimeout(r, 4000));
-      
-      // The GenVM writeContract returns the returned ID in res.result
-      let newId = res && res.result ? res.result : '';
-      
-      if (!newId) {
-          // Fallback if result is empty
-          const latestRes = await readClient.readContract({
+      // 2. Derive dispute ID from on-chain state (Confirmed Path)
+      let newId = '';
+      for (let attempt = 0; attempt < 6; attempt++) {
+        await new Promise(r => setTimeout(r, 4000)); // Wait 4s per attempt to allow block confirmation
+        
+        // Guess backwards from 50 down to 1 to find the latest dispute created by this guest
+        for (let guessId = 50; guessId >= 1; guessId--) {
+          try {
+            const res = await readClient.readContract({
               address: CONTRACT_ADDRESS,
-              functionName: 'get_guest_latest_dispute',
-              args: [guestAccount.address]
-          });
-          newId = latestRes.result;
+              functionName: 'get_dispute',
+              args: [guessId.toString()]
+            });
+            const d = JSON.parse(res.result);
+            if (d.status === 'OPEN' && d.guest && d.guest.toLowerCase() === guestAccount.address.toLowerCase()) {
+              newId = guessId.toString();
+              break; // Found the latest one!
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+        
+        if (newId) break;
       }
       
       if (newId) {
