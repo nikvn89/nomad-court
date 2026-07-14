@@ -20,6 +20,7 @@ class Dispute:
 
 class Contract(gl.Contract):
     disputes: TreeMap[str, Dispute]
+    guest_latest_dispute: TreeMap[str, str]
     next_id: bigint
 
     def __init__(self):
@@ -45,11 +46,12 @@ class Contract(gl.Contract):
             guest_share=bigint(0),
             rationale=""
         )
+        self.guest_latest_dispute[str(gl.message.sender)] = d_id
         self.next_id += bigint(1)
         return d_id
 
     @gl.public.write
-    def submit_evidence(self, dispute_id: str, host_url: str, guest_url: str) -> None:
+    def submit_evidence(self, dispute_id: str, evidence_url: str) -> None:
         if dispute_id not in self.disputes:
             raise gl.vm.UserError("Dispute not found")
             
@@ -57,11 +59,19 @@ class Contract(gl.Contract):
         if d.status != "OPEN":
             raise gl.vm.UserError("Dispute is already resolved")
             
-        if not host_url or not guest_url:
-            raise gl.vm.UserError("Both evidence URLs must be provided")
+        if not evidence_url:
+            raise gl.vm.UserError("Evidence URL must be provided")
             
-        d.host_evidence_url = host_url
-        d.guest_evidence_url = guest_url
+        sender_str = str(gl.message.sender)
+        host_str = str(d.host)
+        guest_str = str(d.guest)
+        
+        if sender_str == host_str:
+            d.host_evidence_url = evidence_url
+        elif sender_str == guest_str:
+            d.guest_evidence_url = evidence_url
+        else:
+            raise gl.vm.UserError("Only Host or Guest can submit evidence")
 
     @gl.public.write
     def resolve_dispute(self, dispute_id: str) -> None:
@@ -147,14 +157,13 @@ class Contract(gl.Contract):
         d.rationale = final_data["reason"]
         
         amt = d.deposit_amount
-        try:
-            if hasattr(gl, "transfer") and amt > bigint(0):
-                host_payout = (amt * bigint(h_share)) // bigint(100)
-                guest_payout = amt - host_payout
-                if host_payout > bigint(0): gl.transfer(d.host, host_payout)
-                if guest_payout > bigint(0): gl.transfer(d.guest, guest_payout)
-        except Exception:
-            pass
+        if amt > bigint(0):
+            host_payout = (amt * bigint(h_share)) // bigint(100)
+            guest_payout = amt - host_payout
+            if host_payout > bigint(0):
+                _Recipient(d.host).emit_transfer(value=host_payout)
+            if guest_payout > bigint(0):
+                _Recipient(d.guest).emit_transfer(value=guest_payout)
 
     @gl.public.view
     def get_dispute(self, dispute_id: str) -> str:
@@ -174,3 +183,9 @@ class Contract(gl.Contract):
             "guest_share": int(d.guest_share),
             "rationale": d.rationale
         })
+
+    @gl.public.view
+    def get_guest_latest_dispute(self, guest_address: str) -> str:
+        if guest_address in self.guest_latest_dispute:
+            return self.guest_latest_dispute[guest_address]
+        return ""
