@@ -43,8 +43,8 @@ function App() {
       const res = await guestClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_dispute',
-        args: [hostAccount.address, rulesUrl]
-        // Removed value: 100n because mock accounts have 0 balance on StudioNet, which caused the transaction to revert!
+        args: [hostAccount.address, rulesUrl],
+        value: 0n
       });
       
       // Wait for block confirmation
