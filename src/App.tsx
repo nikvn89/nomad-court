@@ -40,38 +40,27 @@ function App() {
     setStatusMsg('Creating dispute on GenLayer... Waiting for transaction confirmation.');
     try {
       // 1. Dispatch transaction
-      await guestClient.writeContract({
+      const res = await guestClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_dispute',
-        args: [hostAccount.address, rulesUrl],
-        value: 100n // Mock deposit amount (100)
+        args: [hostAccount.address, rulesUrl]
+        // Removed value: 100n because mock accounts have 0 balance on StudioNet, which caused the transaction to revert!
       });
       
-      // 2. Derive dispute ID from on-chain state (Confirmed Path)
-      // Since GenLayer StudioNet takes a few seconds to reach consensus, we poll the state.
-      let newId = '';
-      for (let attempt = 0; attempt < 6; attempt++) {
-        await new Promise(r => setTimeout(r, 4000)); // Wait 4s per attempt
-        
-        // Guess backwards from 50 down to 1 to find the latest dispute created by this guest
-        for (let guessId = 50; guessId >= 1; guessId--) {
-          try {
-            const res = await readClient.readContract({
+      // Wait for block confirmation
+      await new Promise(r => setTimeout(r, 4000));
+      
+      // The GenVM writeContract returns the returned ID in res.result
+      let newId = res && res.result ? res.result : '';
+      
+      if (!newId) {
+          // Fallback if result is empty
+          const latestRes = await readClient.readContract({
               address: CONTRACT_ADDRESS,
-              functionName: 'get_dispute',
-              args: [guessId.toString()]
-            });
-            const d = JSON.parse(res.result);
-            if (d.status === 'OPEN' && d.guest && d.guest.toLowerCase() === guestAccount.address.toLowerCase()) {
-              newId = guessId.toString();
-              break; // Found the latest one!
-            }
-          } catch (e) {
-            // ignore
-          }
-        }
-        
-        if (newId) break;
+              functionName: 'get_guest_latest_dispute',
+              args: [guestAccount.address]
+          });
+          newId = latestRes.result;
       }
       
       if (newId) {
