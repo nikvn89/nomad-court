@@ -16,8 +16,8 @@ function App() {
   const [activeRole, setActiveRole] = useState<'GUEST' | 'HOST'>('GUEST');
 
   const [disputeId, setDisputeId] = useState('');
-  const [rulesUrl, setRulesUrl] = useState('https://en.wikipedia.org/wiki/Etiquette');
-  const [evidenceUrl, setEvidenceUrl] = useState('https://en.wikipedia.org/wiki/Accident');
+  const [rulesUrl, setRulesUrl] = useState(window.location.origin + '/demo_rules.txt');
+  const [evidenceUrl, setEvidenceUrl] = useState(window.location.origin + '/demo_guest.txt');
   
   const [disputeData, setDisputeData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -222,12 +222,12 @@ function App() {
         {/* Mock Wallet/Role Switcher */}
         <div className="flex items-center justify-center gap-4 mt-6">
           <button 
-            onClick={() => { setActiveRole('GUEST'); setEvidenceUrl('https://en.wikipedia.org/wiki/Accident'); }}
+            onClick={() => { setActiveRole('GUEST'); setEvidenceUrl(window.location.origin + '/demo_guest.txt'); }}
             className={`px-4 py-2 rounded-full font-bold flex items-center gap-2 border ${activeRole === 'GUEST' ? 'bg-cyan-500 text-black border-cyan-500' : 'bg-transparent text-cyan-500 border-cyan-500/50'}`}>
             <User className="w-4 h-4" /> Guest View
           </button>
           <button 
-            onClick={() => { setActiveRole('HOST'); setEvidenceUrl('https://en.wikipedia.org/wiki/Vandalism'); }}
+            onClick={() => { setActiveRole('HOST'); setEvidenceUrl(window.location.origin + '/demo_host.txt'); }}
             className={`px-4 py-2 rounded-full font-bold flex items-center gap-2 border ${activeRole === 'HOST' ? 'bg-purple-500 text-white border-purple-500' : 'bg-transparent text-purple-500 border-purple-500/50'}`}>
             <User className="w-4 h-4" /> Host View
           </button>
