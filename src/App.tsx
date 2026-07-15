@@ -3,7 +3,7 @@ import { createClient, createAccount } from 'genlayer-js';
 import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User } from 'lucide-react';
 import './index.css';
 
-const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x3d1a47c149C605E35b81278C8066b16EB0f43ac0';
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x6833DF2eB3da8FF116B8DB198cce167D992E6a28';
 
 const readClient = createClient({ endpoint: '/api/rpc' });
 
