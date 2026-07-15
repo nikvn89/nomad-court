@@ -5,21 +5,15 @@ import './index.css';
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x65eC86D2926b58898613af185fB6CbFDd845C332';
 
-// Mock test accounts for Host and Guest
-const HOST_PK = '0x1111111111111111111111111111111111111111111111111111111111111111';
-const GUEST_PK = '0x2222222222222222222222222222222222222222222222222222222222222222';
-const hostAccount = createAccount(HOST_PK);
-const guestAccount = createAccount(GUEST_PK);
-
-// Clients with different signers
-const hostClient = createClient({ endpoint: '/api/rpc', account: hostAccount });
-const guestClient = createClient({ endpoint: '/api/rpc', account: guestAccount });
 const readClient = createClient({ endpoint: '/api/rpc' });
 
 function App() {
+  const [hostKey, setHostKey] = useState('0x32ddc45dd7eb02f12783f89adcf38823ca09174e892174349ebb044558fc5419');
+  const [guestKey, setGuestKey] = useState('0x4d91a393c066e8f8c8efaf70e7304bb3b05c5756c1c552a6071b25c4199f1bec');
+  const [isConnected, setIsConnected] = useState(false);
+  const [clients, setClients] = useState<any>(null);
+
   const [activeRole, setActiveRole] = useState<'GUEST' | 'HOST'>('GUEST');
-  const activeClient = activeRole === 'GUEST' ? guestClient : hostClient;
-  const activeAccount = activeRole === 'GUEST' ? guestAccount : hostAccount;
 
   const [disputeId, setDisputeId] = useState('');
   const [rulesUrl, setRulesUrl] = useState('https://en.wikipedia.org/wiki/Etiquette');
@@ -41,10 +35,10 @@ function App() {
     try {
       let txRes: any;
       try {
-        txRes = await guestClient.writeContract({
+        txRes = await clients.guestClient.writeContract({
           address: CONTRACT_ADDRESS,
           functionName: 'create_dispute',
-          args: [hostAccount.address, rulesUrl]
+          args: [clients.hostAccount.address, rulesUrl]
         });
       } catch (e: any) {
         setStatusMsg(`TX Reverted: ${e.message}`);
@@ -71,7 +65,7 @@ function App() {
           const rawData = res.result ? res.result : res;
           const d = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
           const cleanGuest = d.guest ? d.guest.toLowerCase().replace('0x', '') : '';
-          const cleanLocal = guestAccount.address.toLowerCase().replace('0x', '');
+          const cleanLocal = clients.guestAccount.address.toLowerCase().replace('0x', '');
           
           if (d.status === 'OPEN' && cleanGuest.includes(cleanLocal)) {
             return guessId.toString();
@@ -155,6 +149,59 @@ function App() {
       console.log('Not found');
     }
   };
+
+  const handleConnect = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const hAcc = createAccount(hostKey);
+      const gAcc = createAccount(guestKey);
+      const hClient = createClient({ endpoint: '/api/rpc', account: hAcc });
+      const gClient = createClient({ endpoint: '/api/rpc', account: gAcc });
+      
+      setClients({
+        hostAccount: hAcc,
+        guestAccount: gAcc,
+        hostClient: hClient,
+        guestClient: gClient
+      });
+      setIsConnected(true);
+    } catch (err: any) {
+      alert("Invalid Private Key format. Make sure it is a valid hex string starting with 0x.");
+    }
+  };
+
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="w-full max-w-md glass-panel p-8 space-y-8">
+          <div className="text-center space-y-4">
+            <div className="inline-flex items-center justify-center p-4 bg-purple-500/10 rounded-full border border-purple-500/20 mb-2">
+              <Scale className="w-12 h-12 text-purple-400" />
+            </div>
+            <h1 className="text-3xl font-black bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">Connect Wallets</h1>
+            <p className="text-sm text-gray-400">Enter GenLayer testnet private keys (with gas) to interact with the dispute contract.</p>
+          </div>
+          
+          <form onSubmit={handleConnect} className="space-y-6">
+            <div>
+              <label className="block text-sm font-bold text-purple-400 mb-2">Host Private Key</label>
+              <input type="password" required value={hostKey} onChange={e => setHostKey(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded-lg py-3 px-4 focus:ring-2 focus:ring-purple-500 outline-none font-mono text-sm" placeholder="0x..." />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-cyan-400 mb-2">Guest Private Key</label>
+              <input type="password" required value={guestKey} onChange={e => setGuestKey(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded-lg py-3 px-4 focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-sm" placeholder="0x..." />
+            </div>
+            <button type="submit" className="w-full bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-400 hover:to-purple-400 text-white font-black py-4 rounded-xl shadow-lg transition-transform transform active:scale-95">
+              Connect to GenLayer
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  const activeClient = activeRole === 'GUEST' ? clients.guestClient : clients.hostClient;
+  const activeAccount = activeRole === 'GUEST' ? clients.guestAccount : clients.hostAccount;
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-8 py-12">
