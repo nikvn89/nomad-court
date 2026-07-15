@@ -108,8 +108,26 @@ function App() {
       await activeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'submit_evidence',
-        args: [disputeId, evidenceUrl] // Smart contract validates role restrictions
+        args: [disputeId, evidenceUrl]
       });
+      
+      // Wait for consensus
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        setStatusMsg(`Waiting for blockchain consensus... (Attempt ${i + 1}/12)`);
+        try {
+          const res = await readClient.readContract({
+            address: CONTRACT_ADDRESS,
+            functionName: 'get_dispute',
+            args: [disputeId]
+          });
+          const rawData = res.result ? res.result : res;
+          const d = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+          if (activeRole === 'GUEST' && d.guest_evidence_url) break;
+          if (activeRole === 'HOST' && d.host_evidence_url) break;
+        } catch(e) {}
+      }
+      
       setStatusMsg('Evidence submitted successfully!');
       await fetchDispute(disputeId);
     } catch (err: any) {
@@ -120,13 +138,30 @@ function App() {
 
   const handleResolve = async () => {
     setLoading(true);
-    setStatusMsg('AI Jury is analyzing evidence & rules...');
+    setStatusMsg('AI Jury is analyzing evidence & rules... (This may take 40s)');
     try {
       await activeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'resolve_dispute',
         args: [disputeId]
       });
+      
+      // Wait for consensus
+      for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        setStatusMsg(`Waiting for AI Consensus on Blockchain... (Attempt ${i + 1}/15)`);
+        try {
+          const res = await readClient.readContract({
+            address: CONTRACT_ADDRESS,
+            functionName: 'get_dispute',
+            args: [disputeId]
+          });
+          const rawData = res.result ? res.result : res;
+          const d = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+          if (d.status === 'RESOLVED') break;
+        } catch(e) {}
+      }
+      
       setStatusMsg('Dispute resolved & funds distributed atomically!');
       await fetchDispute(disputeId);
     } catch (err: any) {
