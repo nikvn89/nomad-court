@@ -51,36 +51,40 @@ function App() {
       // 2. Derive dispute ID from on-chain state (Confirmed Path)
       let newId = '';
       
-      // Wait 10 seconds to guarantee block confirmation (GenVM StudioNet is slow)
-      await new Promise(r => setTimeout(r, 10000)); 
-      
-      const checkIds = Array.from({length: 50}, (_, i) => 50 - i);
-      const promises = checkIds.map(async (guessId) => {
-        try {
-          const res = await readClient.readContract({
-            address: CONTRACT_ADDRESS,
-            functionName: 'get_dispute',
-            args: [guessId.toString()]
-          });
-          const rawData = res.result ? res.result : res;
-          const d = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-          const cleanGuest = d.guest ? d.guest.toLowerCase().replace('0x', '') : '';
-          const cleanLocal = clients.guestAccount.address.toLowerCase().replace('0x', '');
-          
-          if (d.status === 'OPEN' && cleanGuest.includes(cleanLocal)) {
-            return guessId.toString();
+      // GenVM StudioNet can take 30-40 seconds to reach consensus. Poll every 5s for up to 60s.
+      for (let attempt = 0; attempt < 12; attempt++) {
+        await new Promise(r => setTimeout(r, 5000)); 
+        setStatusMsg(`Waiting for blockchain consensus... (Attempt ${attempt + 1}/12)`);
+        
+        const checkIds = Array.from({length: 20}, (_, i) => 20 - i);
+        const promises = checkIds.map(async (guessId) => {
+          try {
+            const res = await readClient.readContract({
+              address: CONTRACT_ADDRESS,
+              functionName: 'get_dispute',
+              args: [guessId.toString()]
+            });
+            const rawData = res.result ? res.result : res;
+            const d = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+            const cleanGuest = d.guest ? d.guest.toLowerCase().replace('0x', '') : '';
+            const cleanLocal = clients.guestAccount.address.toLowerCase().replace('0x', '');
+            
+            if (d.status === 'OPEN' && cleanGuest.includes(cleanLocal)) {
+              return guessId.toString();
+            }
+          } catch (e) {
+            // ignore
           }
-        } catch (e) {
-          // ignore
+          return null;
+        });
+        
+        const results = await Promise.all(promises);
+        const found = results.filter(Boolean);
+        
+        if (found.length > 0) {
+          newId = found[0]; // first one in the array is the highest ID
+          break; // Found it! Exit polling loop
         }
-        return null;
-      });
-      
-      const results = await Promise.all(promises);
-      const found = results.filter(Boolean);
-      
-      if (found.length > 0) {
-        newId = found[0]; // first one in the array is the highest ID
       }
       
       if (newId) {
@@ -88,7 +92,7 @@ function App() {
         setStatusMsg(`Dispute created successfully! Confirmed ID: ${newId}`);
         await fetchDispute(newId);
       } else {
-        setStatusMsg(`Could not derive ID. TX: ${debugMsg}`);
+        setStatusMsg(`Could not derive ID. TX: ${debugMsg}. (It might just be slow, try refreshing the page later)`);
       }
     } catch (err: any) {
       setStatusMsg(`Error: ${err.message}`);
