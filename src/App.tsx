@@ -9,8 +9,8 @@ const CONTRACT_ADDRESS = "0x19093B657847D91FCbFb301bb5465763BDc3c6c2";
 function App() {
   // Wallet state
   const [connected, setConnected] = useState(false);
-  const [hostKey, setHostKey] = useState('');
-  const [guestKey, setGuestKey] = useState('');
+  const [hostKey, setHostKey] = useState('0x0000000000000000000000000000000000000000000000000000000000000001');
+  const [guestKey, setGuestKey] = useState('0x0000000000000000000000000000000000000000000000000000000000000002');
   const [hostAccount, setHostAccount] = useState<any>(null);
   const [guestAccount, setGuestAccount] = useState<any>(null);
   const [clients, setClients] = useState<any>({ hostClient: null, guestClient: null, readClient: null });
