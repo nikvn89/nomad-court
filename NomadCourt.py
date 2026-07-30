@@ -27,14 +27,16 @@ class Contract(gl.Contract):
         self.disputes = TreeMap()
 
     @gl.public.write
-    def create_dispute(self, host: str, guest: str, rules_url: str) -> str:
+    def create_dispute(self, host: str, rules_url: str) -> str:
+        """Guest calls this with value (deposit). Host address passed as param."""
         if not rules_url:
             raise gl.vm.UserError("Rules URL cannot be empty")
         
         amt = gl.message.value if hasattr(gl.message, "value") else bigint(0)
         d_id = str(self.next_id)
         
-        guest_addr = guest.lower()
+        # Use gl.message.sender as the guest (the caller who sends the deposit)
+        guest_addr = gl.message.sender.as_hex.lower()
         host_addr = host.lower()
         
         self.disputes[d_id] = Dispute(
@@ -54,7 +56,8 @@ class Contract(gl.Contract):
         return d_id
 
     @gl.public.write
-    def submit_evidence(self, dispute_id: str, sender_address: str, evidence_url: str) -> None:
+    def submit_evidence(self, dispute_id: str, evidence_url: str) -> None:
+        """Only the recorded host or guest can submit evidence for their side."""
         try:
             d = self.disputes[dispute_id]
         except Exception:
@@ -64,14 +67,15 @@ class Contract(gl.Contract):
         if not evidence_url:
             raise gl.vm.UserError("Evidence URL must be provided")
             
-        sender_hex = sender_address.lower()
+        # Enforce caller identity via gl.message.sender (not a parameter)
+        sender_hex = gl.message.sender.as_hex.lower()
         
         if sender_hex == d.host:
             d.host_evidence_url = evidence_url
         elif sender_hex == d.guest:
             d.guest_evidence_url = evidence_url
         else:
-            raise gl.vm.UserError("Only Host or Guest can submit evidence")
+            raise gl.vm.UserError("Only the recorded Host or Guest can submit evidence")
 
     @gl.public.write
     def resolve_dispute(self, dispute_id: str) -> None:
@@ -82,7 +86,7 @@ class Contract(gl.Contract):
         if d.status != "OPEN":
             raise gl.vm.UserError("Dispute is already resolved")
         if not d.host_evidence_url or not d.guest_evidence_url:
-            raise gl.vm.UserError("Missing evidence URLs")
+            raise gl.vm.UserError("Both parties must submit evidence before resolution")
         
         h_url = d.host_evidence_url
         g_url = d.guest_evidence_url
@@ -139,11 +143,27 @@ class Contract(gl.Contract):
         final_res = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
         final_data = json.loads(final_res)
         h_share = int(final_data["host_share"])
+        g_share = 100 - h_share
+
         d.status = "RESOLVED"
         d.host_share = bigint(h_share)
-        d.guest_share = bigint(100 - h_share)
+        d.guest_share = bigint(g_share)
         d.rationale = final_data["reason"]
-        
+
+        # --- Atomic payable settlement ---
+        # Calculate payout amounts from the locked deposit
+        total_deposit = d.deposit_amount
+        host_payout = total_deposit * bigint(h_share) // bigint(100)
+        guest_payout = total_deposit - host_payout  # Remainder goes to guest (avoids rounding loss)
+
+        # Transfer payouts atomically:
+        # If either transfer fails, the entire resolve_dispute transaction reverts
+        # (GenLayer write functions are atomic by default — all-or-nothing)
+        if host_payout > bigint(0):
+            gl.transfer(Address(d.host), host_payout)
+        if guest_payout > bigint(0):
+            gl.transfer(Address(d.guest), guest_payout)
+
     @gl.public.view
     def get_dispute(self, dispute_id: str) -> str:
         try:
@@ -157,11 +177,9 @@ class Contract(gl.Contract):
             "deposit_amount": str(d.deposit_amount),
             "host_evidence_url": d.host_evidence_url,
             "guest_evidence_url": d.guest_evidence_url,
+            "rules_url": d.rules_url,
             "status": d.status,
             "host_share": str(d.host_share),
             "guest_share": str(d.guest_share),
             "rationale": d.rationale
         })
-
-
-
