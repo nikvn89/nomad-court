@@ -9,8 +9,8 @@ const CONTRACT_ADDRESS = "0x19093B657847D91FCbFb301bb5465763BDc3c6c2";
 function App() {
   // Wallet state
   const [connected, setConnected] = useState(false);
-  const [hostKey, setHostKey] = useState('0x0000000000000000000000000000000000000000000000000000000000000001');
-  const [guestKey, setGuestKey] = useState('0x0000000000000000000000000000000000000000000000000000000000000002');
+  const [hostKey, setHostKey] = useState('');
+  const [guestKey, setGuestKey] = useState('');
   const [hostAccount, setHostAccount] = useState<any>(null);
   const [guestAccount, setGuestAccount] = useState<any>(null);
   const [clients, setClients] = useState<any>({ hostClient: null, guestClient: null, readClient: null });
@@ -24,6 +24,7 @@ function App() {
   const [disputeData, setDisputeData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const activeAccount = activeRole === 'GUEST' ? guestAccount : hostAccount;
   const activeClient = activeRole === 'GUEST' ? clients.guestClient : clients.hostClient;
@@ -34,6 +35,7 @@ function App() {
 
   const handleConnect = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg('');
     try {
       const hAcct = createAccount(hostKey as `0x${string}`);
       const gAcct = createAccount(guestKey as `0x${string}`);
@@ -49,12 +51,13 @@ function App() {
       setConnected(true);
       setStatusMsg('✅ Wallets connected successfully!');
     } catch (err: any) {
-      setStatusMsg(`❌ Invalid private key: ${err.message}`);
+      setErrorMsg(`❌ Invalid private key: ${err.message}`);
     }
   };
 
   const fetchDispute = async (id: string) => {
     if (!id || !clients.readClient) return;
+    setErrorMsg('');
     try {
       const data = await clients.readClient.readContract({
         address: CONTRACT_ADDRESS,
@@ -68,38 +71,36 @@ function App() {
           return;
         }
       }
-    } catch (err) {
-      console.warn("RPC read failed:", err);
+      setDisputeData(null);
+    } catch (err: any) {
+      console.error("Read failed:", err);
+      setErrorMsg(`⚠️ Failed to read dispute: ${err.message}`);
+      setDisputeData(null);
     }
-    // Fallback to localStorage
-    const mockData = localStorage.getItem(`mock_dispute_${id}`);
-    if (mockData) setDisputeData(JSON.parse(mockData));
-    else setDisputeData(null);
   };
 
   const handleCreateDispute = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeClient || !guestAccount) return;
+    if (!clients.guestClient || !guestAccount) return;
     setLoading(true);
-    setStatusMsg('📝 Creating dispute on GenLayer blockchain...');
+    setErrorMsg('');
+    setStatusMsg('📝 Submitting create_dispute transaction to GenLayer...');
     
     try {
-      // Guest calls create_dispute, sending deposit as value
-      // gl.message.sender will be the guest's address automatically
       const hash = await clients.guestClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_dispute',
         args: [hostAccount.address, rulesUrl],
         value: 100n
       });
-      setStatusMsg(`⏳ Transaction submitted (${hash}). Waiting for confirmation...`);
+      setStatusMsg(`⏳ Transaction submitted! Hash: ${hash}. Waiting for on-chain confirmation...`);
 
-      // Poll to derive the dispute ID from confirmed state (wait max 10s for demo purposes)
+      // Wait for the transaction to be confirmed, then derive dispute ID
+      await new Promise(r => setTimeout(r, 8000));
+      
       let foundId = '';
-      for (let attempt = 0; attempt < 2 && !foundId; attempt++) {
-        await new Promise(r => setTimeout(r, 5000));
-        // Try sequential IDs to find the one matching our guest address
-        for (let tryId = 1; tryId <= 50; tryId++) {
+      for (let attempt = 0; attempt < 12 && !foundId; attempt++) {
+        for (let tryId = 1; tryId <= 100; tryId++) {
           try {
             const res = await clients.readClient.readContract({
               address: CONTRACT_ADDRESS,
@@ -113,30 +114,22 @@ function App() {
                 break;
               }
             }
-          } catch { /* continue */ }
+          } catch { /* continue searching */ }
         }
+        if (!foundId) await new Promise(r => setTimeout(r, 5000));
       }
 
       if (foundId) {
         setDisputeId(foundId);
-        setStatusMsg(`✅ Case created! On-chain Dispute ID: ${foundId}`);
+        setStatusMsg(`✅ Dispute created on-chain! Dispute ID: ${foundId} (Tx: ${hash})`);
         fetchDispute(foundId);
       } else {
-        throw new Error("Transaction polling timed out (RPC might be lagging or wallet has 0 funds). Falling back to demo mode.");
+        setStatusMsg(`✅ Transaction confirmed (${hash}). Check explorer and enter Dispute ID manually.`);
       }
     } catch (err: any) {
       console.error(err);
-      // Demo fallback
-      const mockId = "1";
-      const newMock = {
-        host: hostAccount?.address || '', guest: guestAccount?.address || '',
-        deposit_amount: "100", host_evidence_url: "", guest_evidence_url: "",
-        rules_url: rulesUrl, status: "OPEN", host_share: "0", guest_share: "0", rationale: ""
-      };
-      localStorage.setItem(`mock_dispute_${mockId}`, JSON.stringify(newMock));
-      setDisputeId(mockId);
-      setStatusMsg(`✅ Case created in demo mode (StudioNet RPC unavailable). ID: ${mockId}`);
-      fetchDispute(mockId);
+      setErrorMsg(`❌ Transaction failed: ${err.message}`);
+      setStatusMsg('');
     }
     setLoading(false);
   };
@@ -145,31 +138,22 @@ function App() {
     e.preventDefault();
     if (!activeClient) return;
     setLoading(true);
-    setStatusMsg('📎 Submitting evidence...');
+    setErrorMsg('');
+    setStatusMsg('📎 Submitting evidence on-chain...');
 
     try {
-      // gl.message.sender enforced on-chain — no sender_address param needed
       const hash = await activeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'submit_evidence',
         args: [disputeId, evidenceUrl]
       });
-      setStatusMsg(`✅ Evidence submitted on-chain! (Tx: ${hash})`);
-      setTimeout(() => fetchDispute(disputeId), 5000);
+      setStatusMsg(`✅ Evidence submitted on-chain! Tx: ${hash}`);
+      // Wait for confirmation then refresh
+      setTimeout(() => fetchDispute(disputeId), 8000);
     } catch (err: any) {
       console.error(err);
-      // Demo fallback
-      const existing = localStorage.getItem(`mock_dispute_${disputeId}`);
-      const mockObj = existing ? JSON.parse(existing) : {
-        host: hostAccount?.address || '', guest: guestAccount?.address || '',
-        deposit_amount: "100", host_evidence_url: "", guest_evidence_url: "",
-        status: "OPEN", host_share: "0", guest_share: "0", rationale: ""
-      };
-      if (activeRole === 'HOST') mockObj.host_evidence_url = evidenceUrl;
-      else mockObj.guest_evidence_url = evidenceUrl;
-      localStorage.setItem(`mock_dispute_${disputeId}`, JSON.stringify(mockObj));
-      setStatusMsg(`✅ Evidence submitted! (Demo mode — StudioNet RPC unavailable)`);
-      fetchDispute(disputeId);
+      setErrorMsg(`❌ Evidence submission failed: ${err.message}`);
+      setStatusMsg('');
     }
     setLoading(false);
   };
@@ -178,7 +162,8 @@ function App() {
     e.preventDefault();
     if (!activeClient) return;
     setLoading(true);
-    setStatusMsg('🤖 AI Jury analyzing evidence & preparing atomic settlement...');
+    setErrorMsg('');
+    setStatusMsg('🤖 AI Jury analyzing evidence & preparing atomic settlement... This may take 30-60 seconds.');
 
     try {
       const hash = await activeClient.writeContract({
@@ -186,21 +171,12 @@ function App() {
         functionName: 'resolve_dispute',
         args: [disputeId]
       });
-      setStatusMsg(`⚖️ Dispute resolved & funds settled atomically! (Tx: ${hash})`);
-      setTimeout(() => fetchDispute(disputeId), 5000);
+      setStatusMsg(`⚖️ Dispute resolved & funds settled atomically on-chain! Tx: ${hash}`);
+      setTimeout(() => fetchDispute(disputeId), 8000);
     } catch (err: any) {
       console.error(err);
-      // Demo fallback
-      await new Promise(r => setTimeout(r, 2000));
-      const existing = localStorage.getItem(`mock_dispute_${disputeId}`);
-      const mockObj = existing ? JSON.parse(existing) : disputeData || {};
-      const resolved = {
-        ...mockObj, status: 'RESOLVED', host_share: 0, guest_share: 100,
-        rationale: "Based on the evidence, the Guest's timestamped photos clearly show the carpet stain was pre-existing before check-in. The Host failed to provide contradicting evidence. Under the house rules, pre-existing damage cannot be charged to guests. Full deposit of 100 GL refunded to Guest via atomic on-chain settlement."
-      };
-      localStorage.setItem(`mock_dispute_${disputeId}`, JSON.stringify(resolved));
-      setStatusMsg(`⚖️ AI Jury reached a verdict! (Demo mode — StudioNet RPC unavailable)`);
-      fetchDispute(disputeId);
+      setErrorMsg(`❌ Resolution failed: ${err.message}`);
+      setStatusMsg('');
     }
     setLoading(false);
   };
@@ -219,6 +195,9 @@ function App() {
             </h1>
             <p className="text-sm text-gray-400 text-center">
               Connect your GenLayer testnet wallets to interact with the dispute contract.
+            </p>
+            <p className="text-xs text-gray-600 text-center">
+              Get your private keys from <a href="https://studio.genlayer.com" target="_blank" rel="noreferrer" className="text-cyan-400 underline">studio.genlayer.com</a>
             </p>
           </div>
           
@@ -248,8 +227,8 @@ function App() {
             </button>
           </form>
 
-          {statusMsg && (
-            <div className="text-center text-sm text-red-400">{statusMsg}</div>
+          {errorMsg && (
+            <div className="text-center text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3">{errorMsg}</div>
           )}
         </div>
       </div>
@@ -284,8 +263,13 @@ function App() {
       </div>
 
       {statusMsg && (
-        <div className="glass-panel p-4 text-center text-sm font-medium text-purple-300 animate-pulse max-w-5xl mx-auto mb-8">
+        <div className="glass-panel p-4 text-center text-sm font-medium text-purple-300 animate-pulse max-w-5xl mx-auto mb-4">
           {statusMsg}
+        </div>
+      )}
+      {errorMsg && (
+        <div className="max-w-5xl mx-auto mb-4 p-4 text-center text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg">
+          {errorMsg}
         </div>
       )}
 
@@ -368,6 +352,7 @@ function App() {
               <div className="space-y-2 text-sm text-gray-400 border-b border-gray-800 pb-4">
                 <div className="truncate"><span className="text-purple-400 font-bold">Host:</span> {disputeData.host}</div>
                 <div className="truncate"><span className="text-cyan-400 font-bold">Guest:</span> {disputeData.guest}</div>
+                <div className="truncate text-xs mt-1"><span className="text-gray-500">Rules:</span> {disputeData.rules_url}</div>
                 <div className="text-xs mt-2">
                   <span className="text-gray-500">Host Evid: </span>{disputeData.host_evidence_url ? '✅ Submitted' : '⏳ Pending'}<br/>
                   <span className="text-gray-500">Guest Evid: </span>{disputeData.guest_evidence_url ? '✅ Submitted' : '⏳ Pending'}
@@ -387,7 +372,7 @@ function App() {
 
               {disputeData.rationale && (
                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
-                  <div className="text-sm font-bold text-blue-400 mb-2">AI Jury Rationale:</div>
+                  <div className="text-sm font-bold text-blue-400 mb-2">⚖️ AI Jury Rationale:</div>
                   <div className="text-sm text-blue-200 leading-relaxed italic">"{disputeData.rationale}"</div>
                 </div>
               )}
@@ -405,7 +390,7 @@ function App() {
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-500 space-y-4">
               <Scale className="w-16 h-16 opacity-20" />
-              <p>Enter a Dispute ID to view case details.</p>
+              <p>Enter a Dispute ID or create a new case to view details.</p>
             </div>
           )}
         </div>

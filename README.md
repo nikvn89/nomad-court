@@ -1,23 +1,80 @@
-# NomadCourt - GenLayer Web3 Dispute Resolution
+# NomadCourt — AI-Powered Airbnb Dispute Resolution on GenLayer
 
-A decentralized Web3 application built on GenLayer that acts as an impartial jury for P2P short-term rental disputes (e.g., Airbnb). It connects directly to the GenLayer Intelligent Contract via the `genlayer-js` SDK, utilizing non-deterministic AI execution to concurrently evaluate multi-source evidence (House Rules, Host evidence, Guest evidence). 
+A decentralized Web3 dApp that acts as an **impartial AI jury** for P2P short-term rental disputes (e.g., Airbnb). Built on [GenLayer](https://genlayer.com), it uses non-deterministic AI execution to evaluate multi-source evidence and autonomously calculate fair security deposit splits.
 
-## 🚀 Recent Updates (Based on Judge Feedback)
-We have completely overhauled the architecture to ensure a production-ready, secure, and trustless flow:
+## Live Demo
 
-1. **Real Party Accounts & Roles:** Replaced the embedded signer with a dual-role architecture. The frontend now simulates distinct Web3 Wallets for the Host and Guest, ensuring multi-party interaction.
-2. **Strict Evidence Restriction:** The Intelligent Contract (`submit_evidence`) now enforces cryptographically secure role checks. The Host can only submit Host evidence, and the Guest can only submit Guest evidence. Third-party tampering is strictly blocked.
-3. **Confirmed Transaction Path Derivation:** The frontend no longer guesses Dispute IDs. It waits for block confirmation and queries the on-chain state (`get_guest_latest_dispute`) to derive the mathematically confirmed Dispute ID directly from the transaction path.
-4. **Atomic Payable Settlements:** Replaced `try-except` fallback logic with strict `_Recipient.emit_transfer()` calls. If either the Host or Guest payout fails (e.g., lack of funds), the entire resolution transaction reverts atomically, protecting the locked security deposit.
-5. **Full Flow Repository Test:** We added `test_flow.js` in the repository root to programmatically simulate and verify the entire lifecycle (Creation -> Restriction Checks -> Resolution -> Payout).
+🌐 **https://nomad-court-iota.vercel.app**
 
-## 🛠 Deployed Contract Details
-**Contract Address:** `0x65eC86D2926b58898613af185fB6CbFDd845C332`
-**Network:** GenLayer StudioNet
+📜 **Contract:** [`0x19093B657847D91FCbFb301bb5465763BDc3c6c2`](https://explorer-studio.genlayer.com/address/0x19093B657847D91FCbFb301bb5465763BDc3c6c2)
 
-## 🧪 How to run the automated test
-To verify the full flow and atomicity:
-```bash
-npm install genlayer-js
-node test_flow.js
+## How It Works
+
+1. **Guest** opens a dispute by locking a 100 GL deposit on-chain
+2. Both **Host** and **Guest** submit evidence URLs (photos, receipts, etc.)
+3. Anyone triggers **AI Resolution** — the Intelligent Contract:
+   - Fetches evidence from URLs via `gl.nondet.web.render()`
+   - Sends everything to an LLM via `gl.nondet.exec_prompt()`
+   - Uses **Semantic Banding Consensus** — validators re-run the AI and confirm the verdict falls in the same "band" (0-39%, 40-60%, 61-100%)
+4. The deposit is split via **atomic `gl.transfer()` payouts** — if either transfer fails, the entire transaction reverts
+
+## Architecture
+
 ```
+┌─────────────┐      genlayer-js SDK       ┌──────────────────────┐
+│  React + TS │  ◄───────────────────────►  │  GenLayer StudioNet  │
+│  (Vercel)   │     writeContract /         │                      │
+│             │     readContract            │  NomadCourt.py       │
+└─────────────┘                             │  (Intelligent        │
+                                            │   Contract)          │
+                                            └──────────────────────┘
+```
+
+## Key Security Features
+
+- **`gl.message.sender`** enforces caller identity on-chain — only the recorded Host/Guest can submit evidence for their side
+- **Atomic settlement** — both payouts execute in a single transaction; if one fails, everything reverts
+- **No embedded signers** — users connect with their own GenLayer private keys
+
+## Test URLs
+
+| Role | Evidence URL |
+|------|-------------|
+| House Rules | https://en.wikipedia.org/wiki/Etiquette |
+| Host Evidence | https://en.wikipedia.org/wiki/Vandalism |
+| Guest Evidence | https://en.wikipedia.org/wiki/Accident |
+
+## Repository Structure
+
+```
+├── NomadCourt.py          # GenLayer Intelligent Contract (Python)
+├── src/
+│   ├── App.tsx             # React frontend (TypeScript)
+│   ├── index.css           # Styles
+│   └── main.tsx            # Entry point
+├── test_full_flow.mjs      # End-to-end integration test
+├── index.html              # HTML shell
+├── package.json            # Dependencies
+├── vercel.json             # Vercel proxy config (RPC rewrite)
+└── vite.config.ts          # Vite build config
+```
+
+## Run Locally
+
+```bash
+npm install
+npm run dev
+```
+
+## Run Tests
+
+```bash
+node test_full_flow.mjs
+```
+
+## Tech Stack
+
+- **Smart Contract:** GenLayer Intelligent Contract (Python) with `gl.nondet` AI execution
+- **Frontend:** React + TypeScript + Vite
+- **SDK:** genlayer-js v0.5.13
+- **Deployment:** Vercel (frontend) + GenLayer StudioNet (contract)
