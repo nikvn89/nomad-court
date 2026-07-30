@@ -3,7 +3,7 @@ import { createClient, createAccount } from 'genlayer-js';
 import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User } from 'lucide-react';
 import './index.css';
 
-const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x899b7883C7865c89fe34fD2ca6285AaA2bC70ed2';
+const CONTRACT_ADDRESS = "0x19093B657847D91FCbFb301bb5465763BDc3c6c2";
 
 const readClient = createClient({ endpoint: '/api/rpc' });
 
@@ -38,7 +38,7 @@ function App() {
         txRes = await clients.guestClient.writeContract({
           address: CONTRACT_ADDRESS,
           functionName: 'create_dispute',
-          args: [clients.hostAccount.address, rulesUrl]
+          args: [clients.hostAccount.address, clients.guestAccount.address, rulesUrl]
         });
       } catch (e: any) {
         setStatusMsg(`TX Reverted: ${e.message}`);
@@ -48,42 +48,51 @@ function App() {
       
       let debugMsg = txRes ? JSON.stringify(txRes).substring(0, 50) : 'No TX';
       
-      // 2. Derive dispute ID from on-chain state (Confirmed Path)
+      // 2. Derive dispute ID using get_guest_latest_dispute
       let newId = '';
+      const guestAddr = clients.guestAccount.address;
+      // Try both checksummed and lowercase versions (GenLayer may store either format)
+      const addrVariants = [guestAddr, guestAddr.toLowerCase(), guestAddr.toUpperCase().replace('0X','0x')];
       
-      // GenVM StudioNet can take 30-40 seconds to reach consensus. Poll every 5s for up to 60s.
-      for (let attempt = 0; attempt < 12; attempt++) {
-        await new Promise(r => setTimeout(r, 5000)); 
-        setStatusMsg(`Waiting for blockchain consensus... (Attempt ${attempt + 1}/12)`);
+      // GenVM StudioNet can take 30-90s for consensus. Poll every 8s for up to 3 min.
+      for (let attempt = 0; attempt < 22 && !newId; attempt++) {
+        await new Promise(r => setTimeout(r, 8000)); 
+        setStatusMsg(`Waiting for blockchain consensus... (Attempt ${attempt + 1}/22, ~${((attempt + 1) * 8)}s elapsed)`);
         
-        const checkIds = Array.from({length: 20}, (_, i) => 20 - i);
-        const promises = checkIds.map(async (guessId) => {
+        // Try get_guest_latest_dispute with all address formats
+        for (const addr of addrVariants) {
           try {
             const res = await readClient.readContract({
               address: CONTRACT_ADDRESS,
-              functionName: 'get_dispute',
-              args: [guessId.toString()]
+              functionName: 'get_guest_latest_dispute',
+              args: [addr]
             });
-            const rawData = res.result ? res.result : res;
-            const d = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-            const cleanGuest = d.guest ? d.guest.toLowerCase().replace('0x', '') : '';
-            const cleanLocal = clients.guestAccount.address.toLowerCase().replace('0x', '');
-            
-            if (d.status === 'OPEN' && cleanGuest.includes(cleanLocal)) {
-              return guessId.toString();
+            const latestId = res.result !== undefined ? String(res.result) : String(res);
+            const cleanId = latestId.replace(/"/g, '').trim();
+            if (cleanId && cleanId !== '' && cleanId !== 'null') {
+              newId = cleanId;
+              break;
             }
-          } catch (e) {
-            // ignore
+          } catch (e) { /* keep trying */ }
+        }
+        
+        // Fallback: scan IDs 1-10 directly
+        if (!newId && attempt >= 5) {
+          for (let guessId = 10; guessId >= 1; guessId--) {
+            try {
+              const res = await readClient.readContract({
+                address: CONTRACT_ADDRESS,
+                functionName: 'get_dispute',
+                args: [guessId.toString()]
+              });
+              const rawData = res.result ? res.result : res;
+              const d = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+              if (d && d.status === 'OPEN') {
+                newId = guessId.toString();
+                break;
+              }
+            } catch (e) { /* ignore */ }
           }
-          return null;
-        });
-        
-        const results = await Promise.all(promises);
-        const found = results.filter(Boolean);
-        
-        if (found.length > 0) {
-          newId = found[0]; // first one in the array is the highest ID
-          break; // Found it! Exit polling loop
         }
       }
       
@@ -92,7 +101,7 @@ function App() {
         setStatusMsg(`Dispute created successfully! Confirmed ID: ${newId}`);
         await fetchDispute(newId);
       } else {
-        setStatusMsg(`Could not derive ID. TX: ${debugMsg}. (It might just be slow, try refreshing the page later)`);
+        setStatusMsg(`Could not derive ID. TX: ${debugMsg}. Try entering ID "1" manually in the Dispute ID field and click Refresh.`);
       }
     } catch (err: any) {
       setStatusMsg(`Error: ${err.message}`);
@@ -108,7 +117,7 @@ function App() {
       await activeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'submit_evidence',
-        args: [disputeId, evidenceUrl]
+        args: [disputeId, activeAccount.address, evidenceUrl]
       });
       
       // Wait for consensus
