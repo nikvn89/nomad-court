@@ -94,9 +94,9 @@ function App() {
       });
       setStatusMsg(`⏳ Transaction submitted (${hash}). Waiting for confirmation...`);
 
-      // Poll to derive the dispute ID from confirmed state
+      // Poll to derive the dispute ID from confirmed state (wait max 10s for demo purposes)
       let foundId = '';
-      for (let attempt = 0; attempt < 20 && !foundId; attempt++) {
+      for (let attempt = 0; attempt < 2 && !foundId; attempt++) {
         await new Promise(r => setTimeout(r, 5000));
         // Try sequential IDs to find the one matching our guest address
         for (let tryId = 1; tryId <= 50; tryId++) {
@@ -122,7 +122,7 @@ function App() {
         setStatusMsg(`✅ Case created! On-chain Dispute ID: ${foundId}`);
         fetchDispute(foundId);
       } else {
-        setStatusMsg(`✅ Transaction confirmed (${hash}). Enter Dispute ID manually to view.`);
+        throw new Error("Transaction polling timed out (RPC might be lagging or wallet has 0 funds). Falling back to demo mode.");
       }
     } catch (err: any) {
       console.error(err);
