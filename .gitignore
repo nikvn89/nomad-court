@@ -1,8 +1,19 @@
 node_modules/
 dist/
 package-lock.json
-*.py
-*.mjs
-test_*.js
+
+# Keep NomadCourt.py and test_full_flow.mjs (needed for submission)
+# Ignore other test/deploy scripts
+test_vm*.py
+test_deploy*.mjs
+test_read*.mjs
+test_nomad_court.mjs
+test_flow*.mjs
+test_flow*.js
+test_minimal*.py
 deploy_*.py
+deploy_*.mjs
+run_test_vm*.mjs
+check_version.mjs
+raw_deploy.mjs
 contracts/
