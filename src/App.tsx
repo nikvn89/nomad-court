@@ -1,23 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { createClient, createAccount } from 'genlayer-js';
-import { studionet } from 'genlayer-js/chains';
-import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User, KeyRound } from 'lucide-react';
+import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User, Wallet } from 'lucide-react';
 import './index.css';
 
 const CONTRACT_ADDRESS = "0x19093B657847D91FCbFb301bb5465763BDc3c6c2";
+const RPC_URL = 'https://studio.genlayer.com/api';
+
+let rpcId = 1;
+async function rpc(method: string, params: any[]) {
+  const res = await fetch(RPC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', method, params, id: rpcId++ })
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+  return json.result;
+}
+
+async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
+async function waitForTx(hash: string, maxWait = 120000): Promise<any> {
+  const start = Date.now();
+  while (Date.now() - start < maxWait) {
+    try {
+      const receipt = await rpc('eth_getTransactionReceipt', [hash]);
+      if (receipt) return receipt;
+    } catch { /* keep polling */ }
+    await sleep(4000);
+  }
+  throw new Error('Transaction confirmation timed out');
+}
 
 function App() {
-  // Wallet state
   const [connected, setConnected] = useState(false);
-  const [hostKey, setHostKey] = useState('');
-  const [guestKey, setGuestKey] = useState('');
-  const [hostAccount, setHostAccount] = useState<any>(null);
-  const [guestAccount, setGuestAccount] = useState<any>(null);
-  const [clients, setClients] = useState<any>({ hostClient: null, guestClient: null, readClient: null });
+  const [hostAddr, setHostAddr] = useState('0xFC7b694407fbbc4a20A8AdA59F6D3AbBab49c81B');
+  const [guestAddr, setGuestAddr] = useState('0x96c3432a1aaEA3d0B00163ca96a63d81b3FB8480');
   
   const [activeRole, setActiveRole] = useState<'GUEST' | 'HOST'>('GUEST');
   const [rulesUrl, setRulesUrl] = useState('https://en.wikipedia.org/wiki/Etiquette');
-  const [hostAddrInput, setHostAddrInput] = useState('');
   const [disputeId, setDisputeId] = useState('');
   const [evidenceUrl, setEvidenceUrl] = useState('');
   
@@ -26,8 +46,7 @@ function App() {
   const [statusMsg, setStatusMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const activeAccount = activeRole === 'GUEST' ? guestAccount : hostAccount;
-  const activeClient = activeRole === 'GUEST' ? clients.guestClient : clients.hostClient;
+  const activeAddress = activeRole === 'GUEST' ? guestAddr : hostAddr;
 
   useEffect(() => {
     setEvidenceUrl(window.location.origin + (activeRole === 'GUEST' ? '/demo_guest.txt' : '/demo_host.txt'));
@@ -36,36 +55,25 @@ function App() {
   const handleConnect = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    try {
-      const hAcct = createAccount(hostKey as `0x${string}`);
-      const gAcct = createAccount(guestKey as `0x${string}`);
-      setHostAccount(hAcct);
-      setGuestAccount(gAcct);
-      setHostAddrInput(hAcct.address);
-      
-      const readClient = createClient({ endpoint: 'https://studio.genlayer.com/api' });
-      const hostClient = createClient({ chain: studionet, account: hAcct });
-      const guestClient = createClient({ chain: studionet, account: gAcct });
-      
-      setClients({ hostClient, guestClient, readClient });
-      setConnected(true);
-      setStatusMsg('✅ Wallets connected successfully!');
-    } catch (err: any) {
-      setErrorMsg(`❌ Invalid private key: ${err.message}`);
+    if (!hostAddr.startsWith('0x') || !guestAddr.startsWith('0x')) {
+      setErrorMsg('❌ Addresses must start with 0x');
+      return;
     }
+    setConnected(true);
+    setStatusMsg('✅ Connected!');
   };
 
   const fetchDispute = async (id: string) => {
-    if (!id || !clients.readClient) return;
+    if (!id) return;
     setErrorMsg('');
     try {
-      const data = await clients.readClient.readContract({
-        address: CONTRACT_ADDRESS,
-        functionName: 'get_dispute',
-        args: [id]
-      });
+      const data = await rpc('gen_call', [{
+        to: CONTRACT_ADDRESS,
+        from: activeAddress,
+        data: { function_name: 'get_dispute', function_args: [id] }
+      }]);
       if (data && data.result) {
-        const parsed = JSON.parse(data.result as string);
+        const parsed = JSON.parse(data.result);
         if (parsed && parsed.host) {
           setDisputeData(parsed);
           return;
@@ -81,54 +89,54 @@ function App() {
 
   const handleCreateDispute = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clients.guestClient || !guestAccount) return;
     setLoading(true);
     setErrorMsg('');
-    setStatusMsg('📝 Submitting create_dispute transaction to GenLayer...');
+    setStatusMsg('📝 Submitting create_dispute to GenLayer blockchain...');
     
     try {
-      const hash = await clients.guestClient.writeContract({
-        address: CONTRACT_ADDRESS,
-        functionName: 'create_dispute',
-        args: [hostAccount.address, rulesUrl],
-        value: 100n
-      });
-      setStatusMsg(`⏳ Transaction submitted! Hash: ${hash}. Waiting for on-chain confirmation...`);
-
-      // Wait for the transaction to be confirmed, then derive dispute ID
-      await new Promise(r => setTimeout(r, 8000));
-      
-      let foundId = '';
-      for (let attempt = 0; attempt < 12 && !foundId; attempt++) {
-        for (let tryId = 1; tryId <= 100; tryId++) {
-          try {
-            const res = await clients.readClient.readContract({
-              address: CONTRACT_ADDRESS,
-              functionName: 'get_dispute',
-              args: [String(tryId)]
-            });
-            if (res && res.result) {
-              const parsed = JSON.parse(res.result as string);
-              if (parsed.guest && parsed.guest.toLowerCase() === guestAccount.address.toLowerCase() && parsed.status === 'OPEN') {
-                foundId = String(tryId);
-                break;
-              }
-            }
-          } catch { /* continue searching */ }
+      const hash = await rpc('eth_sendTransaction', [{
+        to: CONTRACT_ADDRESS,
+        from: guestAddr,
+        value: '0x64',
+        data: {
+          function_name: 'create_dispute',
+          function_args: [hostAddr, rulesUrl]
         }
-        if (!foundId) await new Promise(r => setTimeout(r, 5000));
+      }]);
+      setStatusMsg(`⏳ Tx submitted: ${hash}. Waiting for confirmation...`);
+
+      await waitForTx(hash);
+      setStatusMsg(`✅ Transaction confirmed! Searching for dispute ID...`);
+
+      // Derive dispute ID from on-chain state
+      let foundId = '';
+      for (let tryId = 1; tryId <= 100; tryId++) {
+        try {
+          const res = await rpc('gen_call', [{
+            to: CONTRACT_ADDRESS,
+            from: guestAddr,
+            data: { function_name: 'get_dispute', function_args: [String(tryId)] }
+          }]);
+          if (res && res.result) {
+            const parsed = JSON.parse(res.result);
+            if (parsed.guest && parsed.guest.toLowerCase() === guestAddr.toLowerCase() && parsed.status === 'OPEN') {
+              foundId = String(tryId);
+              break;
+            }
+          }
+        } catch { /* continue */ }
       }
 
       if (foundId) {
         setDisputeId(foundId);
-        setStatusMsg(`✅ Dispute created on-chain! Dispute ID: ${foundId} (Tx: ${hash})`);
+        setStatusMsg(`✅ Dispute created! On-chain ID: ${foundId}`);
         fetchDispute(foundId);
       } else {
-        setStatusMsg(`✅ Transaction confirmed (${hash}). Check explorer and enter Dispute ID manually.`);
+        setStatusMsg(`✅ Transaction confirmed (${hash}). Enter Dispute ID manually.`);
       }
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(`❌ Transaction failed: ${err.message}`);
+      setErrorMsg(`❌ Failed: ${err.message}`);
       setStatusMsg('');
     }
     setLoading(false);
@@ -136,23 +144,27 @@ function App() {
 
   const handleSubmitEvidence = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeClient) return;
     setLoading(true);
     setErrorMsg('');
-    setStatusMsg('📎 Submitting evidence on-chain...');
+    setStatusMsg(`📎 Submitting evidence as ${activeRole}...`);
 
     try {
-      const hash = await activeClient.writeContract({
-        address: CONTRACT_ADDRESS,
-        functionName: 'submit_evidence',
-        args: [disputeId, evidenceUrl]
-      });
-      setStatusMsg(`✅ Evidence submitted on-chain! Tx: ${hash}`);
-      // Wait for confirmation then refresh
-      setTimeout(() => fetchDispute(disputeId), 8000);
+      const hash = await rpc('eth_sendTransaction', [{
+        to: CONTRACT_ADDRESS,
+        from: activeAddress,
+        data: {
+          function_name: 'submit_evidence',
+          function_args: [disputeId, evidenceUrl]
+        }
+      }]);
+      setStatusMsg(`⏳ Tx submitted: ${hash}. Waiting...`);
+      await waitForTx(hash);
+      setStatusMsg(`✅ Evidence submitted on-chain!`);
+      await sleep(2000);
+      fetchDispute(disputeId);
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(`❌ Evidence submission failed: ${err.message}`);
+      setErrorMsg(`❌ Failed: ${err.message}`);
       setStatusMsg('');
     }
     setLoading(false);
@@ -160,22 +172,27 @@ function App() {
 
   const handleResolve = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeClient) return;
     setLoading(true);
     setErrorMsg('');
-    setStatusMsg('🤖 AI Jury analyzing evidence & preparing atomic settlement... This may take 30-60 seconds.');
+    setStatusMsg('🤖 AI Jury analyzing evidence... This may take 30-60 seconds.');
 
     try {
-      const hash = await activeClient.writeContract({
-        address: CONTRACT_ADDRESS,
-        functionName: 'resolve_dispute',
-        args: [disputeId]
-      });
-      setStatusMsg(`⚖️ Dispute resolved & funds settled atomically on-chain! Tx: ${hash}`);
-      setTimeout(() => fetchDispute(disputeId), 8000);
+      const hash = await rpc('eth_sendTransaction', [{
+        to: CONTRACT_ADDRESS,
+        from: activeAddress,
+        data: {
+          function_name: 'resolve_dispute',
+          function_args: [disputeId]
+        }
+      }]);
+      setStatusMsg(`⏳ AI processing... Tx: ${hash}`);
+      await waitForTx(hash, 180000); // AI may take longer
+      setStatusMsg(`⚖️ Dispute resolved & funds settled atomically!`);
+      await sleep(2000);
+      fetchDispute(disputeId);
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(`❌ Resolution failed: ${err.message}`);
+      setErrorMsg(`❌ Failed: ${err.message}`);
       setStatusMsg('');
     }
     setLoading(false);
@@ -194,36 +211,33 @@ function App() {
               NomadCourt
             </h1>
             <p className="text-sm text-gray-400 text-center">
-              Connect your GenLayer testnet wallets to interact with the dispute contract.
-            </p>
-            <p className="text-xs text-gray-600 text-center">
-              Get your private keys from <a href="https://studio.genlayer.com" target="_blank" rel="noreferrer" className="text-cyan-400 underline">studio.genlayer.com</a>
+              Enter your GenLayer Studio wallet addresses to interact with the dispute contract.
             </p>
           </div>
           
           <form onSubmit={handleConnect} className="space-y-5">
             <div>
               <label className="block text-sm font-bold text-purple-400 mb-2">
-                <KeyRound className="w-4 h-4 inline mr-1" /> Host Private Key
+                <Wallet className="w-4 h-4 inline mr-1" /> Host Address
               </label>
               <input 
-                type="password" required value={hostKey} onChange={e => setHostKey(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg py-3 px-4 focus:ring-2 focus:ring-purple-500 outline-none font-mono text-sm"
+                type="text" required value={hostAddr} onChange={e => setHostAddr(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-800 rounded-lg py-3 px-4 focus:ring-2 focus:ring-purple-500 outline-none font-mono text-xs"
                 placeholder="0x..."
               />
             </div>
             <div>
               <label className="block text-sm font-bold text-cyan-400 mb-2">
-                <KeyRound className="w-4 h-4 inline mr-1" /> Guest Private Key
+                <Wallet className="w-4 h-4 inline mr-1" /> Guest Address
               </label>
               <input 
-                type="password" required value={guestKey} onChange={e => setGuestKey(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg py-3 px-4 focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-sm"
+                type="text" required value={guestAddr} onChange={e => setGuestAddr(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-800 rounded-lg py-3 px-4 focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-xs"
                 placeholder="0x..."
               />
             </div>
             <button type="submit" className="w-full bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-400 hover:to-purple-400 text-white font-black py-3 rounded-xl shadow-lg transition-all">
-              Connect to GenLayer
+              Connect
             </button>
           </form>
 
@@ -258,7 +272,7 @@ function App() {
           </button>
         </div>
         <div className="text-xs text-gray-500 font-mono">
-          Active: {activeAccount?.address} ({activeRole})
+          Active: {activeAddress} ({activeRole})
         </div>
       </div>
 
@@ -284,7 +298,7 @@ function App() {
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Host Address</label>
                 <input 
-                  type="text" value={hostAddrInput} readOnly
+                  type="text" value={hostAddr} readOnly
                   className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4 text-gray-500 font-mono text-xs"
                 />
               </div>
