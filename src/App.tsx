@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from 'genlayer-js';
-import { studio } from 'genlayer-js/chains';
+import { studionet } from 'genlayer-js/chains';
 import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User } from 'lucide-react';
 import './index.css';
 
@@ -21,7 +21,7 @@ function App() {
   const [statusMsg, setStatusMsg] = useState('');
 
   const writeClient = createClient({ 
-    chain: studio,
+    chain: studionet,
     account: activeAccount 
   });
 
