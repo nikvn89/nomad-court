@@ -12,7 +12,7 @@ function App() {
   const [activeAccount, setActiveAccount] = useState<any>(null);
   const [activeRole, setActiveRole] = useState<'GUEST' | 'HOST'>('GUEST');
   
-  const [rulesUrl, setRulesUrl] = useState('');
+  const [rulesUrl, setRulesUrl] = useState('https://en.wikipedia.org/wiki/Etiquette');
   const [disputeId, setDisputeId] = useState('');
   const [evidenceUrl, setEvidenceUrl] = useState('');
   
