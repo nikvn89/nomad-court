@@ -9,8 +9,6 @@ deploy_*.mjs
 raw_deploy.mjs
 run_test_vm*.mjs
 test_deploy*.mjs
-test_flow*.js
-test_flow*.mjs
 test_minimal*.py
 test_nomad_court.mjs
 test_read*.mjs
