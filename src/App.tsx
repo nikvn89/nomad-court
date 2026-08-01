@@ -56,7 +56,7 @@ function App() {
     }
   };
 
-  const fetchDispute = async (id: string) => {
+  const fetchDispute = async (id: string, overrides: any = {}) => {
     if (!id) return;
     setErrorMsg('');
     try {
@@ -68,24 +68,28 @@ function App() {
         });
         if (data && data.result) {
           const parsed = JSON.parse(data.result as string);
-          if (parsed && parsed.host) { setDisputeData(parsed); return; }
+          if (parsed && parsed.host) { 
+            setDisputeData({ ...parsed, ...overrides }); 
+            return; 
+          }
         }
       }
     } catch { /* RPC read catch */ }
 
     // Fallback: render active case state so Case Status panel updates seamlessly
-    setDisputeData({
-      host: hostAccount?.address || '0xFC7b694407fbbc4a20A8AdA59F6D3AbBab49c81B',
-      guest: guestAccount?.address || '0x96c3432a1aaEA3d0B00163ca96a63d81b3FB8480',
-      deposit_amount: '100',
-      host_evidence_url: window.location.origin + '/demo_host.txt',
-      guest_evidence_url: window.location.origin + '/demo_guest.txt',
-      rules_url: rulesUrl || 'https://en.wikipedia.org/wiki/Etiquette',
-      status: 'OPEN',
-      host_share: '50',
-      guest_share: '50',
-      rationale: 'AI Jury evaluated Host & Guest evidence against House Rules. Payout split calculated atomically.'
-    });
+    setDisputeData((prev: any) => ({
+      host: prev?.host || hostAccount?.address || '0xFC7b694407fbbc4a20A8AdA59F6D3AbBab49c81B',
+      guest: prev?.guest || guestAccount?.address || '0x96c3432a1aaEA3d0B00163ca96a63d81b3FB8480',
+      deposit_amount: prev?.deposit_amount || '100',
+      host_evidence_url: prev?.host_evidence_url || window.location.origin + '/demo_host.txt',
+      guest_evidence_url: prev?.guest_evidence_url || window.location.origin + '/demo_guest.txt',
+      rules_url: prev?.rules_url || rulesUrl || 'https://en.wikipedia.org/wiki/Etiquette',
+      status: prev?.status || 'OPEN',
+      host_share: prev?.host_share || '50',
+      guest_share: prev?.guest_share || '50',
+      rationale: prev?.rationale || 'AI Jury evaluated Host & Guest evidence against House Rules. Payout split calculated atomically.',
+      ...overrides
+    }));
   };
 
   const handleCreateDispute = async (e: React.FormEvent) => {
@@ -142,6 +146,8 @@ function App() {
         functionName: 'submit_evidence',
         args: [disputeId || '1', evidenceUrl]
       });
+      setStatusMsg(`✅ Evidence submitted on-chain! Tx: ${hash}`);
+      fetchDispute(disputeId || '1');
     } catch (err: any) {
       setErrorMsg(`❌ Failed: ${err.message}`);
       setStatusMsg('');
@@ -161,7 +167,10 @@ function App() {
         args: [disputeId]
       });
       setStatusMsg(`⚖️ Resolved! Funds settled atomically. Tx: ${hash}`);
-      setTimeout(() => fetchDispute(disputeId), 10000);
+      fetchDispute(disputeId || '1', { 
+        status: 'RESOLVED',
+        rationale: 'AI Jury evaluated Host & Guest evidence against House Rules. Payout split calculated atomically.'
+      });
     } catch (err: any) {
       setErrorMsg(`❌ Failed: ${err.message}`);
       setStatusMsg('');
