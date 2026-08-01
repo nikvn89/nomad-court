@@ -4,8 +4,8 @@ import { studionet } from 'genlayer-js/chains';
 import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User, KeyRound } from 'lucide-react';
 import './index.css';
 
-// Deployed on GenLayer StudioNet
-const CONTRACT_ADDRESS = '0xF04607bAC5bBf4F46E7010960BF8d1B00065D91a';
+// Deployed on GenLayer StudioNet (New robust contract)
+const CONTRACT_ADDRESS = '0xdaD365D2a7A5A782da2C03d17db58f255D0d0deA';
 
 function App() {
   const [connected, setConnected] = useState(false);
@@ -471,9 +471,9 @@ function App() {
             <h2 className="text-xl font-bold flex items-center gap-2"><Send className="w-5 h-5 text-purple-400" /> 2. Submit Evidence</h2>
             <form onSubmit={handleSubmitEvidence} className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Dispute ID</label>
-                <input type="text" required value={disputeId} onChange={e => {setDisputeId(e.target.value); fetchDispute(e.target.value);}}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4 focus:ring-2 focus:ring-purple-500 outline-none" placeholder="e.g. 1" />
+                <label className="block text-sm text-gray-400 mb-1">Dispute ID (Auto-Synced)</label>
+                <input type="text" readOnly value={disputeId}
+                  className="w-full bg-gray-950/50 border border-gray-800 rounded-lg py-2 px-4 focus:ring-2 focus:ring-purple-500 outline-none cursor-not-allowed text-gray-500" placeholder="e.g. 1" />
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Evidence (URL or Raw Text As {activeRole})</label>
