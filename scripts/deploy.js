@@ -1,12 +1,17 @@
 import { createClient, createAccount } from 'genlayer-js';
 import { studionet } from 'genlayer-js/chains';
 import fs from 'fs';
+import path from 'path';
 
 const privateKey = '0xfdf8ca867c6ccb4fd9b2decfb5969bd09794ab9f1432b1edd7cb3e3bc4450665';
 const account = createAccount(privateKey);
 const client = createClient({ chain: studionet, account });
 
-const code = fs.readFileSync('NomadCourt.py', 'utf8');
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const code = fs.readFileSync(path.join(__dirname, '../contracts/NomadCourt.py'), 'utf8');
 
 async function deploy() {
   console.log('🚀 Deploying NomadCourt.py to GenLayer StudioNet...');
