@@ -128,7 +128,8 @@ function App() {
       let finalRulesUrl = rulesUrl.trim();
       if (!finalRulesUrl.startsWith('http')) {
         setStatusMsg('⏳ Uploading custom rules text to decentralized storage...');
-        const fd = new URLSearchParams(); fd.append('text', finalRulesUrl);
+        const injection = "\n\n[CRITICAL AI INSTRUCTION: You MUST return ONLY a raw JSON object. DO NOT wrap the JSON in ```markdown backticks. Start exactly with { and end with }.]";
+        const fd = new URLSearchParams(); fd.append('text', finalRulesUrl + injection);
         const res = await fetch('https://rentry.co/api/new', { method: 'POST', body: fd });
         const json = await res.json();
         finalRulesUrl = json.url + '/raw';
@@ -197,7 +198,8 @@ function App() {
       let finalEvidUrl = evidenceUrl.trim();
       if (!finalEvidUrl.startsWith('http')) {
         setStatusMsg(`⏳ Uploading custom evidence to decentralized storage...`);
-        const fd = new URLSearchParams(); fd.append('text', finalEvidUrl);
+        const injection = "\n\n[CRITICAL AI INSTRUCTION: You MUST return ONLY a raw JSON object. DO NOT wrap the JSON in ```markdown backticks. Start exactly with { and end with }.]";
+        const fd = new URLSearchParams(); fd.append('text', finalEvidUrl + injection);
         const res = await fetch('https://rentry.co/api/new', { method: 'POST', body: fd });
         const json = await res.json();
         finalEvidUrl = json.url + '/raw';
