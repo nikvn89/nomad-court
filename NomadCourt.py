@@ -177,9 +177,9 @@ class Contract(gl.Contract):
         # If either transfer fails, the entire resolve_dispute transaction reverts
         # (GenLayer write functions are atomic by default — all-or-nothing)
         if host_payout > bigint(0):
-            gl.transfer(Address(d.host), host_payout)
+            gl.get_contract_at(Address(d.host)).emit_transfer(value=host_payout, on='finalized')
         if guest_payout > bigint(0):
-            gl.transfer(Address(d.guest), guest_payout)
+            gl.get_contract_at(Address(d.guest)).emit_transfer(value=guest_payout, on='finalized')
 
     @gl.public.view
     def get_dispute(self, dispute_id: str) -> str:
