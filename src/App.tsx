@@ -127,8 +127,11 @@ function App() {
     try {
       let finalRulesUrl = rulesUrl.trim();
       if (!finalRulesUrl.startsWith('http')) {
-        setStatusMsg('⏳ Encoding rules to data URI...');
-        finalRulesUrl = `data:text/plain;charset=utf-8,${encodeURIComponent(finalRulesUrl)}`;
+        setStatusMsg('⏳ Uploading custom rules text to decentralized storage...');
+        const fd = new URLSearchParams(); fd.append('text', finalRulesUrl);
+        const res = await fetch('https://rentry.co/api/new', { method: 'POST', body: fd });
+        const json = await res.json();
+        finalRulesUrl = json.url + '/raw';
       }
 
       setStatusMsg('📝 Signing & submitting create_dispute with 10 GEN deposit...');
@@ -193,8 +196,11 @@ function App() {
     try {
       let finalEvidUrl = evidenceUrl.trim();
       if (!finalEvidUrl.startsWith('http')) {
-        setStatusMsg(`⏳ Encoding evidence to data URI...`);
-        finalEvidUrl = `data:text/plain;charset=utf-8,${encodeURIComponent(finalEvidUrl)}`;
+        setStatusMsg(`⏳ Uploading custom evidence to decentralized storage...`);
+        const fd = new URLSearchParams(); fd.append('text', finalEvidUrl);
+        const res = await fetch('https://rentry.co/api/new', { method: 'POST', body: fd });
+        const json = await res.json();
+        finalEvidUrl = json.url + '/raw';
       }
 
       setStatusMsg(`📎 Submitting evidence on-chain...`);
