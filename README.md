@@ -6,7 +6,7 @@ A decentralized Web3 dApp that acts as an **impartial AI jury** for P2P short-te
 
 🌐 **https://nomad-court-iota.vercel.app**
 
-📜 **Smart Contract (GenVM):** [`0x92E43668b1944338d14Ccc5b2857be2e74fE10b3`](https://explorer-studio.genlayer.com/address/0x92E43668b1944338d14Ccc5b2857be2e74fE10b3)
+📜 **Smart Contract (GenVM):** [`0x8f5642c7db691f91e29A22104aD856Cfb00e1D22`](https://explorer-studio.genlayer.com/address/0x8f5642c7db691f91e29A22104aD856Cfb00e1D22)
 
 ## How It Works
 
@@ -81,4 +81,4 @@ npm run test
 - **Deployed Contract**
 
 NomadCourt is currently deployed on the GenLayer StudioNet at:
-`0x92E43668b1944338d14Ccc5b2857be2e74fE10b3`
+`0x8f5642c7db691f91e29A22104aD856Cfb00e1D22`
