@@ -36,8 +36,8 @@ class Contract(gl.Contract):
         # GenLayer StudioNet RPC currently drops 'value', so we proceed even if 0
         d_id = str(self.next_id)
         
-        # Use gl.message.sender as the guest (the caller who sends the deposit)
-        guest_addr = gl.message.sender.as_hex.lower()
+        # Use str() instead of .as_hex because Address object doesn't have .as_hex
+        guest_addr = str(gl.message.sender).lower()
         host_addr = host.lower()
         
         self.disputes[d_id] = Dispute(
@@ -68,8 +68,8 @@ class Contract(gl.Contract):
         if not evidence_url:
             raise gl.vm.UserError("Evidence URL must be provided")
             
-        # Enforce caller identity via gl.message.sender (not a parameter)
-        sender_hex = gl.message.sender.as_hex.lower()
+        # Enforce caller identity via gl.message.sender (not a parameter)        
+        sender_hex = str(gl.message.sender).lower()
         
         if sender_hex == d.host:
             d.host_evidence_url = evidence_url
