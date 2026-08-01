@@ -33,8 +33,6 @@ class Contract(gl.Contract):
             raise gl.vm.UserError("Rules URL cannot be empty")
         
         amt = gl.message.value if hasattr(gl.message, "value") else bigint(0)
-        if amt <= bigint(0):
-            raise gl.vm.UserError("Dispute creation requires positive deposit value")
         d_id = str(self.next_id)
         
         # Use str() instead of .as_hex because Address object doesn't have .as_hex
