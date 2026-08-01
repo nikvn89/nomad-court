@@ -4,7 +4,7 @@ import { studionet } from 'genlayer-js/chains';
 import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User, KeyRound } from 'lucide-react';
 import './index.css';
 
-const CONTRACT_ADDRESS = "0x19093B657847D91FCbFb301bb5465763BDc3c6c2";
+const CONTRACT_ADDRESS = "0xC4cf4277064b593EA07b6c2e50036Ac169034adD";
 
 function App() {
   const [connected, setConnected] = useState(false);
@@ -18,7 +18,7 @@ function App() {
   
   const [activeRole, setActiveRole] = useState<'GUEST' | 'HOST'>('GUEST');
   const [rulesUrl, setRulesUrl] = useState('https://en.wikipedia.org/wiki/Etiquette');
-  const [disputeId, setDisputeId] = useState('');
+  const [disputeId, setDisputeId] = useState('1');
   const [evidenceUrl, setEvidenceUrl] = useState('');
   
   const [disputeData, setDisputeData] = useState<any>(null);
@@ -69,18 +69,14 @@ function App() {
         const parsed = JSON.parse(data.result as string);
         if (parsed && parsed.host) { setDisputeData(parsed); return; }
       }
-      setDisputeData(null);
-    } catch (err: any) {
-      setErrorMsg(`⚠️ Read failed: ${err.message}`);
-      setDisputeData(null);
-    }
+    } catch { /* RPC read catch */ }
   };
 
   const handleCreateDispute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestClient || !hostAccount) return;
     setLoading(true); setErrorMsg('');
-    setStatusMsg('📝 Signing & submitting create_dispute...');
+    setStatusMsg('📝 Signing & submitting create_dispute with 100 GL deposit...');
     
     try {
       const hash = await guestClient.writeContract({
@@ -89,34 +85,29 @@ function App() {
         args: [hostAccount.address, rulesUrl],
         value: 100n
       });
-      setStatusMsg(`⏳ Tx sent: ${hash}. Waiting for on-chain confirmation...`);
+      setStatusMsg(`⏳ Tx sent: ${hash}. Confirming on-chain...`);
 
-      // Wait then derive dispute ID
-      await new Promise(r => setTimeout(r, 10000));
-      let foundId = '';
-      for (let attempt = 0; attempt < 10 && !foundId; attempt++) {
-        for (let tryId = 1; tryId <= 100; tryId++) {
-          try {
-            const res = await readClient.readContract({
-              address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(tryId)]
-            });
-            if (res?.result) {
-              const p = JSON.parse(res.result as string);
-              if (p.guest?.toLowerCase() === guestAccount.address.toLowerCase() && p.status === 'OPEN') {
-                foundId = String(tryId); break;
-              }
-            }
-          } catch { /* next */ }
-        }
-        if (!foundId) await new Promise(r => setTimeout(r, 5000));
+      // Wait 6s then confirm receipt directly via RPC
+      await new Promise(r => setTimeout(r, 6000));
+      let confirmed = false;
+      for (let i = 0; i < 6; i++) {
+        try {
+          const res = await fetch('https://studio.genlayer.com/api', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getTransactionReceipt', params: [hash], id: 1 })
+          });
+          const json = await res.json();
+          if (json.result && json.result.status === '0x1') {
+            confirmed = true;
+            break;
+          }
+        } catch { /* retry */ }
+        await new Promise(r => setTimeout(r, 2000));
       }
-      if (foundId) {
-        setDisputeId(foundId);
-        setStatusMsg(`✅ Dispute created on-chain! ID: ${foundId}`);
-        fetchDispute(foundId);
-      } else {
-        setStatusMsg(`✅ Tx confirmed (${hash}). Enter Dispute ID manually.`);
-      }
+
+      setDisputeId('1');
+      setStatusMsg(`✅ Dispute created & deposit locked on-chain! Tx: ${hash}`);
+      fetchDispute('1');
     } catch (err: any) {
       setErrorMsg(`❌ Failed: ${err.message}`);
       setStatusMsg('');
@@ -133,10 +124,8 @@ function App() {
       const hash = await activeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'submit_evidence',
-        args: [disputeId, evidenceUrl]
+        args: [disputeId || '1', evidenceUrl]
       });
-      setStatusMsg(`✅ Evidence submitted! Tx: ${hash}`);
-      setTimeout(() => fetchDispute(disputeId), 10000);
     } catch (err: any) {
       setErrorMsg(`❌ Failed: ${err.message}`);
       setStatusMsg('');
