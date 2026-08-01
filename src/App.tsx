@@ -69,18 +69,6 @@ function App() {
       
       setDisputeId(String(maxId));
       fetchDispute(String(maxId));
-            address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(i)]
-          });
-          if (res && res.result) {
-            maxId = i;
-          } else {
-            break;
-          }
-        } catch {
-          break;
-        }
-      }
-      setDisputeId(String(maxId));
       setStatusMsg(`✅ Connected! Synced to Case #${maxId}`);
     } catch (err: any) {
       setErrorMsg(`❌ Invalid key: ${err.message}`);
