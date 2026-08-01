@@ -42,6 +42,18 @@ You don't need to manually find or paste URLs anymore!
 - **Built-in Scenarios:** The DApp includes 3 one-click "Scenario" buttons at the top of the page. Clicking them will automatically pre-fill realistic House Rules and Evidence texts for both Host and Guest.
 - **Raw Text Support:** You can type any raw text directly into the House Rules or Evidence fields. The React frontend will automatically upload your text to a decentralized text-storage provider (bytebin.lucko.me) and pass the generated URL to the Smart Contract behind the scenes!
 
+## How to Use the DApp (Step-by-Step)
+
+⚠️ **IMPORTANT NETWORK NOTE:** GenLayer StudioNet is currently in beta. Transactions can take **30 to 60 seconds** to finalize. **Please wait for each transaction to fully complete and the UI to update before clicking the next button.**
+
+1. **Connect Wallets:** Paste your Host and Guest private keys (they must be different) and click Connect.
+2. **Select a Scenario:** Click one of the 3 Scenario buttons at the top to pre-fill the text fields.
+3. **Create Dispute (Guest):** Ensure the `Guest` tab is selected. Scroll down and click **Start Case (Lock 10 GEN Deposit)**. Wait patiently until the UI says "New Dispute Created".
+4. **Submit Guest Evidence:** Click **Attach Evidence**. Wait for the success message.
+5. **Submit Host Evidence:** Switch to the `Host` tab at the top. Scroll down and click **Attach Evidence**. Wait for the success message.
+6. **Trigger AI Resolution:** Click the **Trigger AI Resolution** button. Wait 30-60 seconds for the AI Jury to read the evidence, reach consensus, and calculate the payout.
+7. **View Results:** The UI will update with the final Host/Guest split percentages and the AI's rationale.
+
 ## Repository Structure
 
 ```
