@@ -18,9 +18,9 @@ function App() {
   const [guestClient, setGuestClient] = useState<any>(null);
   
   const [activeRole, setActiveRole] = useState<'GUEST' | 'HOST'>('GUEST');
-  const [rulesUrl, setRulesUrl] = useState('https://en.wikipedia.org/wiki/Etiquette');
+  const [rulesUrl, setRulesUrl] = useState('https://raw.githubusercontent.com/nikvn89/nomad-court/main/demo-rules.txt');
   const [disputeId, setDisputeId] = useState('1');
-  const [evidenceUrl, setEvidenceUrl] = useState('https://example.com/evidence');
+  const [evidenceUrl, setEvidenceUrl] = useState('https://raw.githubusercontent.com/nikvn89/nomad-court/main/demo-guest.txt');
   
   const [disputeData, setDisputeData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -31,7 +31,11 @@ function App() {
   const activeClient = activeRole === 'GUEST' ? guestClient : hostClient;
 
   useEffect(() => {
-    setEvidenceUrl(window.location.origin + (activeRole === 'GUEST' ? '/demo_guest.txt' : '/demo_host.txt'));
+    setEvidenceUrl(
+      activeRole === 'GUEST'
+        ? 'https://raw.githubusercontent.com/nikvn89/nomad-court/main/demo-guest.txt'
+        : 'https://raw.githubusercontent.com/nikvn89/nomad-court/main/demo-host.txt'
+    );
   }, [activeRole]);
 
   const handleConnect = (e: React.FormEvent) => {
