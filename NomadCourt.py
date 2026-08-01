@@ -121,7 +121,14 @@ class Contract(gl.Contract):
                 "Return exactly a JSON object: "
                 "{\"host_share\": <int 0-100>, \"guest_share\": <int 0-100>, \"reason\": \"<string>\"}"
             )
-            ai_resp = gl.nondet.exec_prompt(prompt)
+            ai_resp = gl.nondet.exec_prompt(prompt).strip()
+            
+            # Extract JSON block to prevent Markdown formatting errors
+            start_idx = ai_resp.find("{")
+            end_idx = ai_resp.rfind("}")
+            if start_idx != -1 and end_idx != -1 and end_idx >= start_idx:
+                ai_resp = ai_resp[start_idx:end_idx+1]
+                
             try:
                 parsed = json.loads(ai_resp)
                 h_share = int(parsed.get("host_share", 50))

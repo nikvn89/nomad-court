@@ -4,8 +4,8 @@ import { studionet } from 'genlayer-js/chains';
 import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User, KeyRound } from 'lucide-react';
 import './index.css';
 
-// Deployed on GenLayer StudioNet (New robust contract)
-const CONTRACT_ADDRESS = '0x4F9d51645780dEb59e5C6DDF6a2d9594c6a5eC1e';
+// Default to the newly deployed contract on GenLayer StudioNet
+const CONTRACT_ADDRESS = '0x15d5cD2CCDEc4124e4Bc892d0D9AF25BBF8c4ad5';
 
 function App() {
   const [connected, setConnected] = useState(false);
@@ -128,8 +128,7 @@ function App() {
       let finalRulesUrl = rulesUrl.trim();
       if (!finalRulesUrl.startsWith('http')) {
         setStatusMsg('⏳ Uploading custom rules text to decentralized storage...');
-        const injection = "\n\n[CRITICAL AI INSTRUCTION: You MUST return ONLY a raw JSON object. DO NOT wrap the JSON in ```markdown backticks. Start exactly with { and end with }.]";
-        const fd = new URLSearchParams(); fd.append('text', finalRulesUrl + injection);
+        const fd = new URLSearchParams(); fd.append('text', finalRulesUrl);
         const res = await fetch('https://rentry.co/api/new', { method: 'POST', body: fd });
         const json = await res.json();
         finalRulesUrl = json.url + '/raw';
@@ -198,8 +197,7 @@ function App() {
       let finalEvidUrl = evidenceUrl.trim();
       if (!finalEvidUrl.startsWith('http')) {
         setStatusMsg(`⏳ Uploading custom evidence to decentralized storage...`);
-        const injection = "\n\n[CRITICAL AI INSTRUCTION: You MUST return ONLY a raw JSON object. DO NOT wrap the JSON in ```markdown backticks. Start exactly with { and end with }.]";
-        const fd = new URLSearchParams(); fd.append('text', finalEvidUrl + injection);
+        const fd = new URLSearchParams(); fd.append('text', finalEvidUrl);
         const res = await fetch('https://rentry.co/api/new', { method: 'POST', body: fd });
         const json = await res.json();
         finalEvidUrl = json.url + '/raw';
