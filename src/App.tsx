@@ -320,6 +320,22 @@ function App() {
     setDisputeId(String(nextId));
   };
 
+  const loadScenario = (type: 1 | 2 | 3) => {
+    if (type === 1) {
+      setRulesUrl("1. No parties allowed. Penalty: 100% of deposit.\n2. Quiet hours after 10 PM.");
+      if (activeRole === 'HOST') setEvidenceUrl("The neighbors called the police at 1 AM because of loud club music. The guest brought 15 strangers for a party. I request the full deposit as penalty.");
+      else setEvidenceUrl("I did not host a party. It was just a 'study group' with 15 friends. We accidentally played music a bit too loud. Please return my deposit!");
+    } else if (type === 2) {
+      setRulesUrl("Deposit fully refunded if check-out is on time (by 12 PM) and no furniture is broken. Standard cleaning fee is already included in the rent.");
+      if (activeRole === 'HOST') setEvidenceUrl("The guest checked out on time and furniture is intact. However, they left 2 trash bags in the kitchen instead of taking them to the public bin. I suffered emotional damage from this mess, so I am confiscating the entire deposit!");
+      else setEvidenceUrl("I cleaned up and checked out at 11 AM. The rules state standard cleaning is included, so leaving trash bags in the kitchen is normal. The host's demand for the full deposit due to 'emotional damage' is ridiculous. Give me my money back!");
+    } else if (type === 3) {
+      setRulesUrl("Pets allowed. However, guests must maintain cleanliness and pay for any damages caused by their pets.");
+      if (activeRole === 'HOST') setEvidenceUrl("The guest's dog bit a small hole in my old sofa. Even though it's an old sofa, I cherish it. I demand 100% of the deposit so I can buy a brand new sofa!");
+      else setEvidenceUrl("I admit my dog caused a small scratch on the sofa. But that sofa was already heavily worn and torn before I arrived! I agree to pay 20% of the deposit for the scratch, but taking 100% to buy a brand new sofa is a scam!");
+    }
+  };
+
   // ─── WALLET CONNECT ───
   if (!connected) {
     return (
@@ -375,7 +391,19 @@ function App() {
             Start New Case
           </button>
         </div>
-        <div className="text-xs text-gray-500 font-mono">Active: {activeAccount?.address} ({activeRole})</div>
+        <div className="text-xs text-gray-500 font-mono mt-2">Active: {activeAccount?.address} ({activeRole})</div>
+
+        <div className="flex flex-wrap gap-3 mt-4 justify-center">
+          <button onClick={() => loadScenario(1)} className="px-3 py-1.5 bg-gray-900 border border-gray-700 hover:border-cyan-500 rounded-lg text-xs font-bold text-gray-300 transition-colors">
+            🎭 Scenario 1: Guest Fault
+          </button>
+          <button onClick={() => loadScenario(2)} className="px-3 py-1.5 bg-gray-900 border border-gray-700 hover:border-purple-500 rounded-lg text-xs font-bold text-gray-300 transition-colors">
+            🎭 Scenario 2: Host Fault
+          </button>
+          <button onClick={() => loadScenario(3)} className="px-3 py-1.5 bg-gray-900 border border-gray-700 hover:border-yellow-500 rounded-lg text-xs font-bold text-gray-300 transition-colors">
+            🎭 Scenario 3: 50/50 Split
+          </button>
+        </div>
       </div>
 
       {statusMsg && <div className="glass-panel p-4 text-center text-sm font-medium text-purple-300 animate-pulse max-w-5xl mx-auto mb-4">{statusMsg}</div>}
