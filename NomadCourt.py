@@ -142,11 +142,18 @@ class Contract(gl.Contract):
             try:
                 l_data = json.loads(leader_res.value)
                 v_data = json.loads(leader_fn())
-                def get_band(h_share: int) -> int:
-                    if h_share > 60: return 2
-                    if h_share < 40: return 0
-                    return 1
-                return get_band(int(l_data.get("host_share", 50))) == get_band(int(v_data.get("host_share", 50)))
+                l_h_share = int(l_data.get("host_share", 50))
+                v_h_share = int(v_data.get("host_share", 50))
+                
+                # PRODUCTION-GRADE CONSENSUS LOGIC:
+                # In real-world disputes, different AI models/nodes will have slight variations in how they weigh evidence.
+                # A strict comparison causes "Undetermined" consensus failures.
+                # By allowing a 25% margin of error, we ensure the network reaches consensus on reasonable verdicts
+                # while still rejecting malicious nodes that try to steal funds by returning extreme values.
+                diff = l_h_share - v_h_share
+                if diff < 0:
+                    diff = -diff
+                return diff <= 25
             except Exception:
                 return False
 
