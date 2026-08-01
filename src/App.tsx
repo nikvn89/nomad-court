@@ -53,11 +53,22 @@ function App() {
       setConnected(true);
       setStatusMsg(`✅ Connected! Syncing latest case ID from blockchain...`);
       
-      // Sync the latest dispute ID from chain to prevent off-by-one errors on page reload
+      // Sync the latest dispute ID robustly
       let maxId = 1;
-      for (let i = 1; i <= 50; i++) {
+      const checkPromises = Array.from({length: 10}, (_, i) => i + 1).map(async (tryId) => {
         try {
-          const res = await rc.readContract({
+          const res = await rc.readContract({ address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(tryId)] });
+          if (res?.result && res.result.length > 5 && res.result.includes('host')) {
+            return tryId;
+          }
+        } catch { /* ignore */ }
+        return 0;
+      });
+      const results = await Promise.all(checkPromises);
+      maxId = Math.max(1, ...results);
+      
+      setDisputeId(String(maxId));
+      fetchDispute(String(maxId));
             address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(i)]
           });
           if (res && res.result) {
@@ -159,55 +170,24 @@ function App() {
         await new Promise(r => setTimeout(r, 2000));
       }
 
-      // Derive the dispute ID dynamically from on-chain state!
-      let derivedId = '';
+      // Sync the ID robustly after creation
       const startId = Math.max(1, parseInt(disputeId || '1'));
-      for (let attempt = 0; attempt < 3; attempt++) {
-        // Only check a few IDs concurrently to avoid blocking the UI for minutes!
-        const promises = Array.from({length: 6}, (_, i) => startId + i).map(async (tryId) => {
-          try {
-            const res = await readClient.readContract({
-              address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(tryId)]
-            });
-            if (res?.result) {
-              const p = JSON.parse(res.result as string);
-              if (p.guest?.toLowerCase() === guestAccount.address.toLowerCase() && p.status === 'OPEN') {
-                return String(tryId);
-              }
-            }
-          } catch { /* ignore RPC errors */ }
-          return null;
-        });
-        
-        const results = await Promise.all(promises);
-        derivedId = results.find(id => id !== null) || '';
-        
-        if (derivedId) break;
-        await new Promise(r => setTimeout(r, 1500));
-      }
-      
-      // Fallback due to GenLayer StudioNet gen_call 'type' RPC bug:
-      if (!derivedId) {
-        console.warn("RPC read bug prevented dynamic ID derivation.");
-        let guessedId = startId;
-        // If the current case data is loaded and is already closed/resolved, 
-        // the user didn't click 'Start New Case', so the new ID must be startId + 1.
-        if (disputeData && disputeData.status !== 'OPEN') {
-          guessedId = startId + 1;
-        }
-        derivedId = String(guessedId);
-      }
-
-      setDisputeId(derivedId);
-      setStatusMsg(`✅ Dispute created & deposit locked on-chain! Tx: ${hash}`);
-      fetchDispute(derivedId, {
-        status: 'OPEN',
-        host_evidence_url: '',
-        guest_evidence_url: '',
-        host_share: '0',
-        guest_share: '0',
-        rationale: 'Awaiting evidence submission and AI resolution...'
+      let maxId = startId;
+      const checkPromises = Array.from({length: 10}, (_, i) => startId + i).map(async (tryId) => {
+        try {
+          const res = await readClient.readContract({ address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(tryId)] });
+          if (res?.result && res.result.length > 5 && res.result.includes('host')) {
+            return tryId;
+          }
+        } catch { /* ignore */ }
+        return 0;
       });
+      const results = await Promise.all(checkPromises);
+      maxId = Math.max(startId, ...results);
+
+      setDisputeId(String(maxId));
+      await fetchDispute(String(maxId));
+      setStatusMsg(`✅ New Dispute Created! Case ID is ${maxId}`);
     } catch (err: any) {
       setErrorMsg(`❌ Failed: ${err.message}`);
       setStatusMsg('');
