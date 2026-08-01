@@ -142,9 +142,10 @@ function App() {
 
       // Derive the dispute ID dynamically from on-chain state!
       let derivedId = '';
+      const startId = Math.max(1, parseInt(disputeId || '1'));
       for (let attempt = 0; attempt < 3; attempt++) {
         // Only check a few IDs concurrently to avoid blocking the UI for minutes!
-        const promises = [1, 2, 3, 4, 5].map(async (tryId) => {
+        const promises = Array.from({length: 6}, (_, i) => startId + i).map(async (tryId) => {
           try {
             const res = await readClient.readContract({
               address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(tryId)]
@@ -168,8 +169,8 @@ function App() {
       
       // Fallback due to GenLayer StudioNet gen_call 'type' RPC bug:
       if (!derivedId) {
-        console.warn("RPC read bug prevented dynamic ID derivation. Falling back to ID '1'");
-        derivedId = '1';
+        console.warn("RPC read bug prevented dynamic ID derivation. Auto-incrementing from previous ID.");
+        derivedId = String(startId + 1);
       }
 
       setDisputeId(derivedId);
@@ -305,6 +306,16 @@ function App() {
     setLoading(false);
   };
 
+  const resetDemo = () => {
+    setRulesUrl('');
+    setEvidenceUrl('');
+    setDisputeData(null);
+    setStatusMsg('');
+    setErrorMsg('');
+    const nextId = parseInt(disputeId || '0') + 1;
+    setDisputeId(String(nextId));
+  };
+
   // ─── WALLET CONNECT ───
   if (!connected) {
     return (
@@ -354,6 +365,10 @@ function App() {
           <button onClick={() => setActiveRole('HOST')}
             className={`px-4 py-2 rounded-full font-bold flex items-center gap-2 border ${activeRole === 'HOST' ? 'bg-purple-500 text-white border-purple-500' : 'bg-transparent text-purple-500 border-purple-500/50'}`}>
             <User className="w-4 h-4" /> Host
+          </button>
+          <button onClick={resetDemo}
+            className="px-4 py-2 rounded-full font-bold flex items-center gap-2 border border-gray-600 text-gray-400 hover:bg-gray-800 transition-all">
+            Start New Case
           </button>
         </div>
         <div className="text-xs text-gray-500 font-mono">Active: {activeAccount?.address} ({activeRole})</div>
