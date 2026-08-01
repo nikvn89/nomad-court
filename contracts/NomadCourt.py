@@ -185,12 +185,12 @@ class Contract(gl.Contract):
         guest_payout = total_deposit - host_payout  # Remainder goes to guest (avoids rounding loss)
 
         # Transfer payouts atomically:
-        # Note: emit_transfer to EOA addresses on current GenLayer StudioNet causes a `(construct)` OUT transaction error.
-        # Temporarily commented out for hackathon submission to ensure a clean transaction history.
-        # if host_payout > bigint(0):
-        #     gl.get_contract_at(Address(d.host)).emit_transfer(value=host_payout, on='finalized')
-        # if guest_payout > bigint(0):
-        #     gl.get_contract_at(Address(d.guest)).emit_transfer(value=guest_payout, on='finalized')
+        # If either transfer fails, the entire resolve_dispute transaction reverts
+        # (GenLayer write functions are atomic by default — all-or-nothing)
+        if host_payout > bigint(0):
+            gl.get_contract_at(Address(d.host)).emit_transfer(value=host_payout, on='finalized')
+        if guest_payout > bigint(0):
+            gl.get_contract_at(Address(d.guest)).emit_transfer(value=guest_payout, on='finalized')
 
     @gl.public.view
     def get_dispute(self, dispute_id: str) -> str:
