@@ -169,8 +169,10 @@ function App() {
       
       // Fallback due to GenLayer StudioNet gen_call 'type' RPC bug:
       if (!derivedId) {
-        console.warn("RPC read bug prevented dynamic ID derivation. Auto-incrementing from previous ID.");
-        derivedId = String(startId + 1);
+        console.warn("RPC read bug prevented dynamic ID derivation.");
+        // If they used 'Start New Case', startId is already the correct new ID.
+        // If they didn't, we just stick to startId and let them manually adjust if needed.
+        derivedId = String(startId);
       }
 
       setDisputeId(derivedId);
