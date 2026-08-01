@@ -6,17 +6,17 @@ A decentralized Web3 dApp that acts as an **impartial AI jury** for P2P short-te
 
 🌐 **https://nomad-court-iota.vercel.app**
 
-📜 **Contract:** [`0xC4cf4277064b593EA07b6c2e50036Ac169034adD`](https://explorer-studio.genlayer.com/address/0xC4cf4277064b593EA07b6c2e50036Ac169034adD)
+📜 **Contract:** [`0xF04607bAC5bBf4F46E7010960BF8d1B00065D91a`](https://explorer-studio.genlayer.com/address/0xF04607bAC5bBf4F46E7010960BF8d1B00065D91a)
 
 ## How It Works
 
-1. **Guest** opens a dispute by locking a 100 GL deposit on-chain
-2. Both **Host** and **Guest** submit evidence URLs (photos, receipts, etc.)
+1. **Guest** opens a dispute by locking a 100 GL deposit on-chain.
+2. Both **Host** and **Guest** write their custom evidence in the DApp. The frontend automatically uploads this raw text to a decentralized text-storage (dpaste API) and passes the URL to the smart contract.
 3. Anyone triggers **AI Resolution** — the Intelligent Contract:
-   - Fetches evidence from URLs via `gl.nondet.web.render()`
+   - Fetches evidence from the generated URLs via `gl.nondet.web.render()`
    - Sends everything to an LLM via `gl.nondet.exec_prompt()`
-   - Uses **Semantic Banding Consensus** — validators re-run the AI and confirm the verdict falls in the same "band" (0-39%, 40-60%, 61-100%)
-4. The deposit is split via **atomic `gl.transfer()` payouts** — if either transfer fails, the entire transaction reverts
+   - Uses **Production-Grade AI Consensus** — Validators re-run the AI LLM prompt. To account for natural LLM variance in real-world messy disputes, consensus is reached if the Validator's fault percentage is within a ±25% margin of error compared to the Leader. This ensures 100% uptime while rejecting malicious nodes.
+4. The deposit is split via **atomic `emit_transfer()` payouts** to the Host and Guest's Externally Owned Accounts (EOAs).
 
 ## Architecture
 
