@@ -6,7 +6,7 @@ A decentralized Web3 dApp that acts as an **impartial AI jury** for P2P short-te
 
 🌐 **https://nomad-court-iota.vercel.app**
 
-📜 **Contract:** [`0x19093B657847D91FCbFb301bb5465763BDc3c6c2`](https://explorer-studio.genlayer.com/address/0x19093B657847D91FCbFb301bb5465763BDc3c6c2)
+📜 **Contract:** [`0xC4cf4277064b593EA07b6c2e50036Ac169034adD`](https://explorer-studio.genlayer.com/address/0xC4cf4277064b593EA07b6c2e50036Ac169034adD)
 
 ## How It Works
 

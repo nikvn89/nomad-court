@@ -82,7 +82,7 @@ async function waitForTx(hash, label, maxWait = 120000) {
   } catch (e) {
     console.log(`  ⚠️  Deploy failed: ${e.message}`);
     console.log('  ℹ️  Using existing contract address for remaining tests.');
-    contractAddr = '0x19093B657847D91FCbFb301bb5465763BDc3c6c2';
+    contractAddr = '0xC4cf4277064b593EA07b6c2e50036Ac169034adD';
   }
 
   // Accounts (use env vars or known testnet addresses)
