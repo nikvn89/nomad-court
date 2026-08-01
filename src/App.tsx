@@ -128,10 +128,13 @@ function App() {
       let finalRulesUrl = rulesUrl.trim();
       if (!finalRulesUrl.startsWith('http')) {
         setStatusMsg('⏳ Uploading custom rules text to decentralized storage...');
-        const fd = new URLSearchParams(); fd.append('text', finalRulesUrl);
-        const res = await fetch('https://rentry.co/api/new', { method: 'POST', body: fd });
+        const res = await fetch('https://bytebin.lucko.me/post', { 
+            method: 'POST', 
+            body: finalRulesUrl,
+            headers: { 'Content-Type': 'text/plain' }
+        });
         const json = await res.json();
-        finalRulesUrl = json.url + '/raw';
+        finalRulesUrl = 'https://bytebin.lucko.me/' + json.key;
       }
 
       setStatusMsg('📝 Signing & submitting create_dispute with 10 GEN deposit...');
@@ -197,10 +200,13 @@ function App() {
       let finalEvidUrl = evidenceUrl.trim();
       if (!finalEvidUrl.startsWith('http')) {
         setStatusMsg(`⏳ Uploading custom evidence to decentralized storage...`);
-        const fd = new URLSearchParams(); fd.append('text', finalEvidUrl);
-        const res = await fetch('https://rentry.co/api/new', { method: 'POST', body: fd });
+        const res = await fetch('https://bytebin.lucko.me/post', { 
+            method: 'POST', 
+            body: finalEvidUrl,
+            headers: { 'Content-Type': 'text/plain' }
+        });
         const json = await res.json();
-        finalEvidUrl = json.url + '/raw';
+        finalEvidUrl = 'https://bytebin.lucko.me/' + json.key;
       }
 
       setStatusMsg(`📎 Submitting evidence on-chain...`);
