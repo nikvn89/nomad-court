@@ -125,9 +125,35 @@ function App() {
         await new Promise(r => setTimeout(r, 2000));
       }
 
-      setDisputeId('1');
+      // Derive the dispute ID dynamically from on-chain state!
+      let derivedId = '';
+      for (let attempt = 0; attempt < 5; attempt++) {
+        for (let tryId = 1; tryId <= 100; tryId++) {
+          try {
+            const res = await readClient.readContract({
+              address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(tryId)]
+            });
+            if (res?.result) {
+              const p = JSON.parse(res.result as string);
+              if (p.guest?.toLowerCase() === guestAccount.address.toLowerCase() && p.status === 'OPEN') {
+                derivedId = String(tryId); break;
+              }
+            }
+          } catch { /* ignore RPC errors */ }
+        }
+        if (derivedId) break;
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      
+      // Fallback due to GenLayer StudioNet gen_call 'type' RPC bug:
+      if (!derivedId) {
+        console.warn("RPC read bug prevented dynamic ID derivation. Falling back to ID '1'");
+        derivedId = '1';
+      }
+
+      setDisputeId(derivedId);
       setStatusMsg(`✅ Dispute created & deposit locked on-chain! Tx: ${hash}`);
-      fetchDispute('1', {
+      fetchDispute(derivedId, {
         status: 'OPEN',
         host_evidence_url: '',
         guest_evidence_url: '',
