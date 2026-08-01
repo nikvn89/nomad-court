@@ -113,12 +113,12 @@ function App() {
         finalRulesUrl = (await res.text()).trim() + '.txt';
       }
 
-      setStatusMsg('📝 Signing & submitting create_dispute with 100 GL deposit...');
+      setStatusMsg('📝 Signing & submitting create_dispute with 10 GEN deposit...');
       const hash = await guestClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_dispute',
         args: [hostAccount.address, finalRulesUrl],
-        value: 100n
+        value: 10000000000000000000n // 10 GEN
       });
       setStatusMsg(`⏳ Tx sent: ${hash}. Confirming on-chain...`);
 
@@ -271,12 +271,16 @@ function App() {
         if (jsonA.result) balAfter = BigInt(jsonA.result);
       } catch { /* ignore */ }
 
-      const diff = Number(balAfter - balBefore);
+      const diff = balAfter - balBefore;
       let hShare = 50;
       let gShare = 50;
-      if (balBefore !== 0n && diff >= 0 && diff <= 100) {
-        hShare = diff;
-        gShare = 100 - diff;
+      // 10 GEN = 10_000_000_000_000_000_000 wei. 1% is 100_000_000_000_000_000 wei.
+      if (balBefore !== 0n && diff >= -1000000000000000000n && diff <= 11000000000000000000n) {
+        let percentage = Math.round(Number(diff) / 100000000000000000);
+        if (percentage < 0) percentage = 0;
+        if (percentage > 100) percentage = 100;
+        hShare = percentage;
+        gShare = 100 - hShare;
       } else {
         hShare = 30; // fallback if balance unchanged due to same block or error
         gShare = 70;
@@ -394,7 +398,7 @@ function App() {
                 </div>
               </div>
               <button disabled={loading} type="submit" className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-2 rounded-lg flex justify-center items-center gap-2">
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Start Case (Lock 100 GL Deposit)'}
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Start Case (Lock 10 GEN Deposit)'}
               </button>
             </form>
           </div>
