@@ -44,7 +44,7 @@ You don't need to manually find or paste URLs anymore!
 
 ## How to Use the DApp (Step-by-Step)
 
-⚠️ **IMPORTANT NETWORK NOTE:** GenLayer StudioNet is currently in beta. Transactions can take **30 to 60 seconds** to finalize. **Please wait for each transaction to fully complete and the UI to update before clicking the next button.**
+⚠️ **Important Note on AI Consensus:** GenLayer's intelligent execution and multi-node AI consensus is a powerful process that ensures robust decentralization. Because of this, transactions typically take about **30 to 60 seconds** to finalize. **Please wait for each transaction to fully complete (look for the success message on the UI) before clicking the next button.**
 
 1. **Connect Wallets:** Paste your Host and Guest private keys (they must be different) and click Connect.
 2. **Select a Scenario:** Click one of the 3 Scenario buttons at the top to pre-fill the text fields.
