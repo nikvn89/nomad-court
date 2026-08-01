@@ -10,8 +10,8 @@ A decentralized Web3 dApp that acts as an **impartial AI jury** for P2P short-te
 
 ## How It Works
 
-1. **Guest** opens a dispute by locking a 100 GL deposit on-chain.
-2. Both **Host** and **Guest** write their custom evidence in the DApp. The frontend automatically uploads this raw text to a decentralized text-storage (dpaste API) and passes the URL to the smart contract.
+1. **Guest** opens a dispute by locking a 10 GEN deposit on-chain.
+2. Both **Host** and **Guest** write their custom evidence in the DApp. The frontend automatically uploads this raw text to a decentralized text-storage (bytebin.lucko.me) and passes the URL to the smart contract.
 3. Anyone triggers **AI Resolution** — the Intelligent Contract:
    - Fetches evidence from the generated URLs via `gl.nondet.web.render()`
    - Sends everything to an LLM via `gl.nondet.exec_prompt()`
@@ -47,12 +47,15 @@ A decentralized Web3 dApp that acts as an **impartial AI jury** for P2P short-te
 ## Repository Structure
 
 ```
-├── NomadCourt.py          # GenLayer Intelligent Contract (Python)
+├── contracts/
+│   └── NomadCourt.py       # GenLayer Intelligent Contract (Python)
+├── scripts/
+│   ├── deploy.js           # Deployment script
+│   └── test_flow.js        # End-to-end integration test
 ├── src/
 │   ├── App.tsx             # React frontend (TypeScript)
 │   ├── index.css           # Styles
 │   └── main.tsx            # Entry point
-├── test_full_flow.mjs      # End-to-end integration test
 ├── index.html              # HTML shell
 ├── package.json            # Dependencies
 ├── vercel.json             # Vercel proxy config (RPC rewrite)
@@ -69,7 +72,7 @@ npm run dev
 ## Run Tests
 
 ```bash
-node test_full_flow.mjs
+npm run test
 ```
 
 ## Tech Stack
