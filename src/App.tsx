@@ -128,9 +128,8 @@ function App() {
       let finalRulesUrl = rulesUrl.trim();
       if (!finalRulesUrl.startsWith('http')) {
         setStatusMsg('⏳ Uploading custom rules text to decentralized storage...');
-        const fd = new URLSearchParams(); fd.append('content', finalRulesUrl); fd.append('format', 'url');
-        const res = await fetch('https://dpaste.com/api/v2/', { method: 'POST', body: fd });
-        finalRulesUrl = (await res.text()).trim() + '.txt';
+        const res = await fetch('https://paste.rs', { method: 'POST', body: finalRulesUrl });
+        finalRulesUrl = (await res.text()).trim();
       }
 
       setStatusMsg('📝 Signing & submitting create_dispute with 10 GEN deposit...');
@@ -196,9 +195,8 @@ function App() {
       let finalEvidUrl = evidenceUrl.trim();
       if (!finalEvidUrl.startsWith('http')) {
         setStatusMsg(`⏳ Uploading custom evidence to decentralized storage...`);
-        const fd = new URLSearchParams(); fd.append('content', finalEvidUrl); fd.append('format', 'url');
-        const res = await fetch('https://dpaste.com/api/v2/', { method: 'POST', body: fd });
-        finalEvidUrl = (await res.text()).trim() + '.txt';
+        const res = await fetch('https://paste.rs', { method: 'POST', body: finalEvidUrl });
+        finalEvidUrl = (await res.text()).trim();
       }
 
       setStatusMsg(`📎 Submitting evidence on-chain...`);
