@@ -127,9 +127,8 @@ function App() {
     try {
       let finalRulesUrl = rulesUrl.trim();
       if (!finalRulesUrl.startsWith('http')) {
-        setStatusMsg('⏳ Uploading custom rules text to decentralized storage...');
-        const res = await fetch('https://paste.rs', { method: 'POST', body: finalRulesUrl });
-        finalRulesUrl = (await res.text()).trim();
+        setStatusMsg('⏳ Encoding rules to data URI...');
+        finalRulesUrl = `data:text/plain;charset=utf-8,${encodeURIComponent(finalRulesUrl)}`;
       }
 
       setStatusMsg('📝 Signing & submitting create_dispute with 10 GEN deposit...');
@@ -194,9 +193,8 @@ function App() {
     try {
       let finalEvidUrl = evidenceUrl.trim();
       if (!finalEvidUrl.startsWith('http')) {
-        setStatusMsg(`⏳ Uploading custom evidence to decentralized storage...`);
-        const res = await fetch('https://paste.rs', { method: 'POST', body: finalEvidUrl });
-        finalEvidUrl = (await res.text()).trim();
+        setStatusMsg(`⏳ Encoding evidence to data URI...`);
+        finalEvidUrl = `data:text/plain;charset=utf-8,${encodeURIComponent(finalEvidUrl)}`;
       }
 
       setStatusMsg(`📎 Submitting evidence on-chain...`);
