@@ -87,7 +87,7 @@ function App() {
       status: prev?.status || 'OPEN',
       host_share: prev?.host_share || '50',
       guest_share: prev?.guest_share || '50',
-      rationale: prev?.rationale || 'AI Jury evaluated Host & Guest evidence against House Rules. Payout split calculated atomically.',
+      rationale: prev?.rationale || '[On-chain execution completed successfully. Note: GenLayer StudioNet RPC read is currently limited, so the exact AI text cannot be fetched to the UI, but funds were settled on-chain based on the AI verdict.]',
       ...overrides
     }));
   };
@@ -169,7 +169,7 @@ function App() {
       setStatusMsg(`⚖️ Resolved! Funds settled atomically. Tx: ${hash}`);
       fetchDispute(disputeId || '1', { 
         status: 'RESOLVED',
-        rationale: 'AI Jury evaluated Host & Guest evidence against House Rules. Payout split calculated atomically.'
+        rationale: '[On-chain execution completed successfully. Note: GenLayer StudioNet RPC read is currently limited, so the exact AI text cannot be fetched to the UI, but funds were settled on-chain based on the AI verdict.]'
       });
     } catch (err: any) {
       setErrorMsg(`❌ Failed: ${err.message}`);
