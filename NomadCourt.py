@@ -9,21 +9,21 @@ from dataclasses import dataclass
 class Dispute:
     host: str
     guest: str
-    deposit_amount: u256
+    deposit_amount: bigint
     host_evidence_url: str
     guest_evidence_url: str
     rules_url: str
     status: str
-    host_share: int
-    guest_share: int
+    host_share: bigint
+    guest_share: bigint
     rationale: str
 
 class Contract(gl.Contract):
     disputes: TreeMap[str, Dispute]
-    next_id: int
+    next_id: bigint
 
     def __init__(self):
-        self.next_id = 1
+        self.next_id = bigint(1)
         self.disputes = TreeMap()
 
     @gl.public.write.payable
@@ -32,9 +32,16 @@ class Contract(gl.Contract):
         if not rules_url:
             raise gl.vm.UserError("Rules URL cannot be empty")
         
-        amt = gl.message.value if hasattr(gl.message, "value") else u256(0)
-        if amt == u256(0):
-            raise gl.vm.UserError("Dispute creation requires positive deposit value")
+        # Safely extract value, ensuring it's a bigint.
+        try:
+            amt = bigint(gl.message.value)
+        except Exception:
+            amt = bigint(0)
+            
+        if amt <= bigint(0):
+            # Include the debug info in the error so the user can see exactly what GenVM received!
+            val_type = str(type(gl.message.value)) if hasattr(gl.message, 'value') else "No hasattr"
+            raise gl.vm.UserError(f"Dispute creation requires positive deposit value. Received amt: {amt}, Type: {val_type}")
             
         d_id = str(self.next_id)
         
@@ -50,12 +57,12 @@ class Contract(gl.Contract):
             guest_evidence_url="",
             rules_url=rules_url,
             status="OPEN",
-            host_share=0,
-            guest_share=0,
+            host_share=bigint(0),
+            guest_share=bigint(0),
             rationale=""
         )
 
-        self.next_id += 1
+        self.next_id += bigint(1)
         return d_id
 
     @gl.public.write
@@ -149,22 +156,22 @@ class Contract(gl.Contract):
         g_share = 100 - h_share
 
         d.status = "RESOLVED"
-        d.host_share = h_share
-        d.guest_share = g_share
+        d.host_share = bigint(h_share)
+        d.guest_share = bigint(g_share)
         d.rationale = final_data["reason"]
 
         # --- Atomic payable settlement ---
         # Calculate payout amounts from the locked deposit
         total_deposit = d.deposit_amount
-        host_payout = total_deposit * u256(h_share) // u256(100)
+        host_payout = total_deposit * bigint(h_share) // bigint(100)
         guest_payout = total_deposit - host_payout  # Remainder goes to guest (avoids rounding loss)
 
         # Transfer payouts atomically:
         # If either transfer fails, the entire resolve_dispute transaction reverts
         # (GenLayer write functions are atomic by default — all-or-nothing)
-        if host_payout > u256(0):
+        if host_payout > bigint(0):
             gl.transfer(Address(d.host), host_payout)
-        if guest_payout > u256(0):
+        if guest_payout > bigint(0):
             gl.transfer(Address(d.guest), guest_payout)
 
     @gl.public.view
@@ -182,7 +189,7 @@ class Contract(gl.Contract):
             "guest_evidence_url": d.guest_evidence_url,
             "rules_url": d.rules_url,
             "status": d.status,
-            "host_share": d.host_share,
-            "guest_share": d.guest_share,
+            "host_share": str(d.host_share),
+            "guest_share": str(d.guest_share),
             "rationale": d.rationale
         })
