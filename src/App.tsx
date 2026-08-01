@@ -104,15 +104,24 @@ function App() {
       setErrorMsg('❌ Host and Guest cannot be the same address (you used the same private key for both)');
       return;
     }
-    if (!rulesUrl) { setErrorMsg('❌ House Rules URL cannot be empty'); return; }
+    if (!rulesUrl) { setErrorMsg('❌ House Rules cannot be empty'); return; }
     setLoading(true); setErrorMsg('');
-    setStatusMsg('📝 Signing & submitting create_dispute with 100 GL deposit...');
+    setStatusMsg('📝 Preparing case data...');
     
     try {
+      let finalRulesUrl = rulesUrl.trim();
+      if (!finalRulesUrl.startsWith('http')) {
+        setStatusMsg('⏳ Uploading custom rules text to decentralized storage...');
+        const fd = new URLSearchParams(); fd.append('content', finalRulesUrl); fd.append('format', 'url');
+        const res = await fetch('https://dpaste.com/api/v2/', { method: 'POST', body: fd });
+        finalRulesUrl = (await res.text()).trim() + '.txt';
+      }
+
+      setStatusMsg('📝 Signing & submitting create_dispute with 100 GL deposit...');
       const hash = await guestClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_dispute',
-        args: [hostAccount.address, rulesUrl],
+        args: [hostAccount.address, finalRulesUrl],
         value: 100n
       });
       setStatusMsg(`⏳ Tx sent: ${hash}. Confirming on-chain...`);
@@ -187,14 +196,23 @@ function App() {
   const handleSubmitEvidence = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeClient) return;
-    if (!evidenceUrl) { setErrorMsg('❌ Evidence URL cannot be empty'); return; }
+    if (!evidenceUrl) { setErrorMsg('❌ Evidence cannot be empty'); return; }
     setLoading(true); setErrorMsg('');
-    setStatusMsg(`📎 Submitting evidence as ${activeRole}...`);
+    setStatusMsg(`📎 Preparing evidence as ${activeRole}...`);
     try {
+      let finalEvidUrl = evidenceUrl.trim();
+      if (!finalEvidUrl.startsWith('http')) {
+        setStatusMsg(`⏳ Uploading custom evidence to decentralized storage...`);
+        const fd = new URLSearchParams(); fd.append('content', finalEvidUrl); fd.append('format', 'url');
+        const res = await fetch('https://dpaste.com/api/v2/', { method: 'POST', body: fd });
+        finalEvidUrl = (await res.text()).trim() + '.txt';
+      }
+
+      setStatusMsg(`📎 Submitting evidence on-chain...`);
       const hash = await activeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'submit_evidence',
-        args: [disputeId || '1', evidenceUrl]
+        args: [disputeId || '1', finalEvidUrl]
       });
       setStatusMsg(`✅ Evidence submitted on-chain! Tx: ${hash}`);
       fetchDispute(disputeId || '1', {
@@ -358,11 +376,10 @@ function App() {
                 <input type="text" value={hostAccount?.address || ''} readOnly className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4 text-gray-500 font-mono text-xs" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">House Rules URL</label>
+                <label className="block text-sm text-gray-400 mb-1">House Rules (URL or Raw Text)</label>
                 <div className="relative">
-                  <Link className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
-                  <input type="url" required value={rulesUrl} onChange={e => setRulesUrl(e.target.value)}
-                    className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 pl-10 pr-4 focus:ring-2 focus:ring-cyan-500 outline-none" placeholder="https://..." />
+                  <textarea required value={rulesUrl} onChange={e => setRulesUrl(e.target.value)} rows={3}
+                    className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4 focus:ring-2 focus:ring-cyan-500 outline-none resize-none" placeholder="Paste a URL or type custom rules here..." />
                 </div>
               </div>
               <button disabled={loading} type="submit" className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-2 rounded-lg flex justify-center items-center gap-2">
@@ -380,9 +397,9 @@ function App() {
                   className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4 focus:ring-2 focus:ring-purple-500 outline-none" placeholder="e.g. 1" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Evidence URL (As {activeRole})</label>
-                <input type="url" required value={evidenceUrl} onChange={e => setEvidenceUrl(e.target.value)}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4 focus:ring-2 focus:ring-purple-500 outline-none" placeholder="https://..." />
+                <label className="block text-sm text-gray-400 mb-1">Evidence (URL or Raw Text As {activeRole})</label>
+                <textarea required value={evidenceUrl} onChange={e => setEvidenceUrl(e.target.value)} rows={4}
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4 focus:ring-2 focus:ring-purple-500 outline-none resize-none" placeholder="Paste a URL or type your evidence story here..." />
               </div>
               <button disabled={loading || !disputeId} type="submit" className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 rounded-lg">Attach Evidence</button>
             </form>
