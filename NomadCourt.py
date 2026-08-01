@@ -137,19 +137,23 @@ class Contract(gl.Contract):
                 return json.dumps(fallback, sort_keys=True)
 
         def validator_fn(leader_res) -> bool:
-            if not isinstance(leader_res, gl.vm.Return):
-                return False
             try:
-                l_data = json.loads(leader_res.value)
+                # Handle both raw string and gl.vm.Return object
+                leader_str = ""
+                if type(leader_res) is str:
+                    leader_str = leader_res
+                elif hasattr(leader_res, "value"):
+                    leader_str = leader_res.value
+                elif hasattr(leader_res, "calldata"):
+                    leader_str = leader_res.calldata
+                else:
+                    return False
+                    
+                l_data = json.loads(leader_str)
                 v_data = json.loads(leader_fn())
                 l_h_share = int(l_data.get("host_share", 50))
                 v_h_share = int(v_data.get("host_share", 50))
                 
-                # PRODUCTION-GRADE CONSENSUS LOGIC:
-                # In real-world disputes, different AI models/nodes will have slight variations in how they weigh evidence.
-                # A strict comparison causes "Undetermined" consensus failures.
-                # By allowing a 25% margin of error, we ensure the network reaches consensus on reasonable verdicts
-                # while still rejecting malicious nodes that try to steal funds by returning extreme values.
                 diff = l_h_share - v_h_share
                 if diff < 0:
                     diff = -diff
