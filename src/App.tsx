@@ -4,7 +4,8 @@ import { studionet } from 'genlayer-js/chains';
 import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User, KeyRound } from 'lucide-react';
 import './index.css';
 
-const CONTRACT_ADDRESS = "0xC4cf4277064b593EA07b6c2e50036Ac169034adD";
+// Deployed on GenLayer StudioNet
+const CONTRACT_ADDRESS = '0xf68D4Da95cB4EEd240D7d97fF696E8F4BBd2caf2';
 
 function App() {
   const [connected, setConnected] = useState(false);
