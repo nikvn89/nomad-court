@@ -58,7 +58,8 @@ function App() {
       const checkPromises = Array.from({length: 10}, (_, i) => i + 1).map(async (tryId) => {
         try {
           const res = await rc.readContract({ address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(tryId)] });
-          if (res?.result && res.result.length > 5 && res.result.includes('host')) {
+          const resStr = typeof res === 'string' ? res : (res as any)?.result;
+          if (resStr && typeof resStr === 'string' && resStr.length > 5 && resStr.includes('host')) {
             return tryId;
           }
         } catch { /* ignore */ }
@@ -85,8 +86,9 @@ function App() {
           functionName: 'get_dispute',
           args: [id]
         });
-        if (data && data.result) {
-          const parsed = JSON.parse(data.result as string);
+        const dataStr = typeof data === 'string' ? data : (data as any)?.result;
+        if (dataStr && typeof dataStr === 'string' && dataStr.length > 5) {
+          const parsed = JSON.parse(dataStr);
           if (parsed && parsed.host) { 
             setDisputeData({ ...parsed, ...overrides }); 
             return; 
@@ -164,7 +166,8 @@ function App() {
       const checkPromises = Array.from({length: 10}, (_, i) => startId + i).map(async (tryId) => {
         try {
           const res = await readClient.readContract({ address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(tryId)] });
-          if (res?.result && res.result.length > 5 && res.result.includes('host')) {
+          const resStr = typeof res === 'string' ? res : (res as any)?.result;
+          if (resStr && typeof resStr === 'string' && resStr.length > 5 && resStr.includes('host')) {
             return tryId;
           }
         } catch { /* ignore */ }
@@ -255,12 +258,27 @@ function App() {
       }
 
       setStatusMsg(`⏳ AI Execution accepted! Tx: ${hash}. Waiting for block state sync...`);
-      // Wait for GenLayer nodes to synchronize the new state
-      await new Promise(r => setTimeout(r, 6000));
+      // Loop to wait for block state sync because GenLayer can take 20-30s
+      let resolved = false;
+      for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const res = await activeClient.readContract({ address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [disputeId || '1'] });
+          const resStr = typeof res === 'string' ? res : (res as any)?.result;
+          if (resStr && typeof resStr === 'string' && resStr.includes('"RESOLVED"')) {
+            resolved = true;
+            break;
+          }
+        } catch { /* ignore */ }
+      }
       
       // Fetch the REAL state from the contract
       await fetchDispute(disputeId || '1');
-      setStatusMsg(`⚖️ Resolved! Funds settled atomically. Tx: ${hash}`);
+      if (resolved) {
+        setStatusMsg(`⚖️ Resolved! Funds settled atomically. Tx: ${hash}`);
+      } else {
+        setStatusMsg(`⚖️ Sent! Tx: ${hash}. (If state isn't updated yet, click Refresh in a few seconds)`);
+      }
     } catch (err: any) {
       setErrorMsg(`❌ Failed: ${err.message}`);
       setStatusMsg('');
