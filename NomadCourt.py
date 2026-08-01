@@ -204,3 +204,8 @@ class Contract(gl.Contract):
             "guest_share": str(d.guest_share),
             "rationale": d.rationale
         })
+
+    @gl.public.read
+    def get_dispute_count(self) -> dict:
+        """Returns the total number of disputes created so far."""
+        return {"count": str(self.next_id - bigint(1))}

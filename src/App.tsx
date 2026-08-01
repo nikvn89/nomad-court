@@ -189,9 +189,13 @@ function App() {
       // Fallback due to GenLayer StudioNet gen_call 'type' RPC bug:
       if (!derivedId) {
         console.warn("RPC read bug prevented dynamic ID derivation.");
-        // If they used 'Start New Case', startId is already the correct new ID.
-        // If they didn't, we just stick to startId and let them manually adjust if needed.
-        derivedId = String(startId);
+        let guessedId = startId;
+        // If the current case data is loaded and is already closed/resolved, 
+        // the user didn't click 'Start New Case', so the new ID must be startId + 1.
+        if (disputeData && disputeData.status !== 'OPEN') {
+          guessedId = startId + 1;
+        }
+        derivedId = String(guessedId);
       }
 
       setDisputeId(derivedId);
@@ -269,6 +273,7 @@ function App() {
 
       // Wait for tx confirmation
       await new Promise(r => setTimeout(r, 6000));
+      let txSuccess = false;
       for (let i = 0; i < 15; i++) {
         try {
           const resTx = await fetch('https://studio.genlayer.com/api', {
@@ -276,9 +281,19 @@ function App() {
             body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getTransactionReceipt', params: [hash], id: 1 })
           });
           const jsonTx = await resTx.json();
-          if (jsonTx.result && jsonTx.result.status === '0x1') break;
+          if (jsonTx.result) {
+            if (jsonTx.result.status === '0x1') txSuccess = true;
+            break; // We got a receipt, break the polling loop
+          }
         } catch { /* retry */ }
         await new Promise(r => setTimeout(r, 2000));
+      }
+
+      if (!txSuccess) {
+        setErrorMsg('❌ AI Resolution failed (Tx Reverted). Please check the GenLayer Explorer for the exact Error Message!');
+        setLoading(false);
+        setStatusMsg('');
+        return;
       }
 
       // Get Host balance after
