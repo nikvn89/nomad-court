@@ -34,7 +34,7 @@ function App() {
     setEvidenceUrl('');
   }, [activeRole]);
 
-  const handleConnect = (e: React.FormEvent) => {
+  const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     try {
@@ -51,7 +51,26 @@ function App() {
       setGuestClient(gc);
 
       setConnected(true);
-      setStatusMsg(`✅ Connected! Host: ${hAcct.address}, Guest: ${gAcct.address}`);
+      setStatusMsg(`✅ Connected! Syncing latest case ID from blockchain...`);
+      
+      // Sync the latest dispute ID from chain to prevent off-by-one errors on page reload
+      let maxId = 1;
+      for (let i = 1; i <= 50; i++) {
+        try {
+          const res = await rc.readContract({
+            address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(i)]
+          });
+          if (res && res.result) {
+            maxId = i;
+          } else {
+            break;
+          }
+        } catch {
+          break;
+        }
+      }
+      setDisputeId(String(maxId));
+      setStatusMsg(`✅ Connected! Synced to Case #${maxId}`);
     } catch (err: any) {
       setErrorMsg(`❌ Invalid key: ${err.message}`);
     }
