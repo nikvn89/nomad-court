@@ -505,12 +505,26 @@ function App() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800">
-                  <div className="text-sm text-gray-400 mb-1">Host Payout</div>
+                <div className={`bg-gray-950/50 p-4 rounded-lg border ${activeRole === 'HOST' ? 'border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.2)]' : 'border-gray-800'}`}>
+                  <div className="text-sm text-gray-400 mb-1 flex items-center justify-between">
+                    <span>Host Payout {activeRole === 'HOST' && '(You)'}</span>
+                    {disputeData.status === 'RESOLVED' && (
+                      Number(disputeData.host_share) > 50 ? <span className="text-green-400 text-[10px] font-bold bg-green-400/20 px-2 py-0.5 rounded">🏆 WIN</span> :
+                      Number(disputeData.host_share) < 50 ? <span className="text-red-400 text-[10px] font-bold bg-red-400/20 px-2 py-0.5 rounded">❌ LOSE</span> :
+                      <span className="text-yellow-400 text-[10px] font-bold bg-yellow-400/20 px-2 py-0.5 rounded">🤝 TIE</span>
+                    )}
+                  </div>
                   <div className="text-2xl font-black">{disputeData.host_share}%</div>
                 </div>
-                <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800">
-                  <div className="text-sm text-gray-400 mb-1">Guest Payout</div>
+                <div className={`bg-gray-950/50 p-4 rounded-lg border ${activeRole === 'GUEST' ? 'border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.2)]' : 'border-gray-800'}`}>
+                  <div className="text-sm text-gray-400 mb-1 flex items-center justify-between">
+                    <span>Guest Payout {activeRole === 'GUEST' && '(You)'}</span>
+                    {disputeData.status === 'RESOLVED' && (
+                      Number(disputeData.guest_share) > 50 ? <span className="text-green-400 text-[10px] font-bold bg-green-400/20 px-2 py-0.5 rounded">🏆 WIN</span> :
+                      Number(disputeData.guest_share) < 50 ? <span className="text-red-400 text-[10px] font-bold bg-red-400/20 px-2 py-0.5 rounded">❌ LOSE</span> :
+                      <span className="text-yellow-400 text-[10px] font-bold bg-yellow-400/20 px-2 py-0.5 rounded">🤝 TIE</span>
+                    )}
+                  </div>
                   <div className="text-2xl font-black">{disputeData.guest_share}%</div>
                 </div>
               </div>
