@@ -251,18 +251,8 @@ function App() {
     e.preventDefault();
     if (!activeClient) return;
     setLoading(true); setErrorMsg('');
-    setStatusMsg('🤖 AI Jury analyzing evidence... May take 30-60s.');
     try {
-      // Get Host balance before
-      let balBefore = 0n;
-      try {
-        const resB = await fetch('https://studio.genlayer.com/api', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getBalance', params: [hostAccount.address, 'latest'], id: 1 })
-        });
-        const jsonB = await resB.json();
-        if (jsonB.result) balBefore = BigInt(jsonB.result);
-      } catch { /* ignore */ }
+      setStatusMsg('🤖 AI Jury analyzing evidence... May take 30-60s.');
 
       const hash = await activeClient.writeContract({
         address: CONTRACT_ADDRESS,
@@ -296,49 +286,13 @@ function App() {
         return;
       }
 
-      // Get Host balance after
-      let balAfter = balBefore;
-      try {
-        const resA = await fetch('https://studio.genlayer.com/api', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getBalance', params: [hostAccount.address, 'latest'], id: 2 })
-        });
-        const jsonA = await resA.json();
-        if (jsonA.result) balAfter = BigInt(jsonA.result);
-      } catch { /* ignore */ }
-
-      const diff = balAfter - balBefore;
-      let hShare = 50;
-      let gShare = 50;
-      // 10 GEN = 10_000_000_000_000_000_000 wei. 1% is 100_000_000_000_000_000 wei.
-      if (balBefore !== 0n && diff >= -1000000000000000000n && diff <= 11000000000000000000n) {
-        let percentage = Math.round(Number(diff) / 100000000000000000);
-        if (percentage < 0) percentage = 0;
-        if (percentage > 100) percentage = 100;
-        hShare = percentage;
-        gShare = 100 - hShare;
-      } else {
-        hShare = 30; // fallback if balance unchanged due to same block or error
-        gShare = 70;
-      }
-
-      let dynRat = '';
-      if (hShare > gShare) {
-        dynRat = `AI Jury ruled in favor of the Host. The Guest was found liable, resulting in a ${hShare}% payout to the Host.`;
-      } else if (gShare > hShare) {
-        dynRat = `AI Jury ruled in favor of the Guest. The Host was found at fault, resulting in a ${gShare}% refund to the Guest.`;
-      } else {
-        dynRat = `AI Jury ruled it a Tie (50/50 split) based on the evidence.`;
-      }
-      dynRat += ` (Note: The exact AI text log cannot be fetched due to RPC limits, but this payout split reflects the TRUE on-chain LLM execution deduced from real balance transfers!)`;
-
+      setStatusMsg(`⏳ AI Execution accepted! Tx: ${hash}. Waiting for block state sync...`);
+      // Wait for GenLayer nodes to synchronize the new state
+      await new Promise(r => setTimeout(r, 6000));
+      
+      // Fetch the REAL state from the contract
+      await fetchDispute(disputeId || '1');
       setStatusMsg(`⚖️ Resolved! Funds settled atomically. Tx: ${hash}`);
-      fetchDispute(disputeId || '1', { 
-        status: 'RESOLVED',
-        host_share: String(hShare),
-        guest_share: String(gShare),
-        rationale: dynRat
-      });
     } catch (err: any) {
       setErrorMsg(`❌ Failed: ${err.message}`);
       setStatusMsg('');
