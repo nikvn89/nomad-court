@@ -15,4 +15,3 @@ test_minimal*.py
 test_nomad_court.mjs
 test_read*.mjs
 test_vm*.py
-contracts/
