@@ -5,7 +5,7 @@ import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User, KeyRound } from '
 import './index.css';
 
 // Deployed on GenLayer StudioNet
-const CONTRACT_ADDRESS = '0xfAda7be3D6a726De84823D7e631cF74ec903cB52';
+const CONTRACT_ADDRESS = '0x375421D8CaC82B7fE09832540ff172CDFB0c5Ec7';
 
 function App() {
   const [connected, setConnected] = useState(false);
