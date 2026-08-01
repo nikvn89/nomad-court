@@ -132,8 +132,9 @@ function App() {
 
       // Derive the dispute ID dynamically from on-chain state!
       let derivedId = '';
-      for (let attempt = 0; attempt < 5; attempt++) {
-        for (let tryId = 1; tryId <= 100; tryId++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        // Only check a few IDs concurrently to avoid blocking the UI for minutes!
+        const promises = [1, 2, 3, 4, 5].map(async (tryId) => {
           try {
             const res = await readClient.readContract({
               address: CONTRACT_ADDRESS, functionName: 'get_dispute', args: [String(tryId)]
@@ -141,13 +142,18 @@ function App() {
             if (res?.result) {
               const p = JSON.parse(res.result as string);
               if (p.guest?.toLowerCase() === guestAccount.address.toLowerCase() && p.status === 'OPEN') {
-                derivedId = String(tryId); break;
+                return String(tryId);
               }
             }
           } catch { /* ignore RPC errors */ }
-        }
+          return null;
+        });
+        
+        const results = await Promise.all(promises);
+        derivedId = results.find(id => id !== null) || '';
+        
         if (derivedId) break;
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1500));
       }
       
       // Fallback due to GenLayer StudioNet gen_call 'type' RPC bug:
