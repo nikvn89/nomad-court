@@ -5,7 +5,7 @@ import { ShieldAlert, Send, Gavel, Scale, Loader2, Link, User, KeyRound } from '
 import './index.css';
 
 // Deployed on GenLayer StudioNet
-const CONTRACT_ADDRESS = '0x6EbBBc95E9506a572e68f4c2637CE20713A6A165';
+const CONTRACT_ADDRESS = '0xbD41FfDDB2E785332E06eD6C3bE1F6f9789F8dB9';
 
 function App() {
   const [connected, setConnected] = useState(false);
@@ -108,8 +108,7 @@ function App() {
       const hash = await guestClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_dispute',
-        args: [hostAccount.address, rulesUrl],
-        value: 100n
+        args: [hostAccount.address, rulesUrl]
       });
       setStatusMsg(`⏳ Tx sent: ${hash}. Confirming on-chain...`);
 

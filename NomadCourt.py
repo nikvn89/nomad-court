@@ -26,7 +26,7 @@ class Contract(gl.Contract):
         self.next_id = bigint(1)
         self.disputes = TreeMap()
 
-    @gl.public.payable
+    @gl.public.write
     def create_dispute(self, host: str, rules_url: str) -> str:
         """Guest calls this with value (deposit). Host address passed as param."""
         if not rules_url:
