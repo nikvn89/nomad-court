@@ -109,7 +109,7 @@ function App() {
         address: CONTRACT_ADDRESS,
         functionName: 'create_dispute',
         args: [hostAccount.address, rulesUrl],
-        value: parseEther(depositAmount)
+        value: 100n
       });
       setStatusMsg(`⏳ Tx sent: ${hash}. Confirming on-chain...`);
 
