@@ -259,7 +259,7 @@ function App() {
       }
 
       if (!txSuccess) {
-        setErrorMsg('❌ AI Resolution failed (Tx Reverted). Please check the GenLayer Explorer for the exact Error Message!');
+        setErrorMsg('❌ AI Jury failed to reach consensus (UNDETERMINED) or Tx reverted. The case might be too ambiguous! Please click "Trigger AI Resolution" again to summon a new jury and retry.');
         setLoading(false);
         setStatusMsg('');
         return;
@@ -379,13 +379,13 @@ function App() {
 
         <div className="flex flex-wrap gap-3 mt-4 justify-center">
           <button onClick={() => loadScenario(1)} className="px-3 py-1.5 bg-gray-900 border border-gray-700 hover:border-cyan-500 rounded-lg text-xs font-bold text-gray-300 transition-colors">
-            🎭 Scenario 1: Guest Fault
+            🎭 Scenario 1
           </button>
           <button onClick={() => loadScenario(2)} className="px-3 py-1.5 bg-gray-900 border border-gray-700 hover:border-purple-500 rounded-lg text-xs font-bold text-gray-300 transition-colors">
-            🎭 Scenario 2: Host Fault
+            🎭 Scenario 2
           </button>
           <button onClick={() => loadScenario(3)} className="px-3 py-1.5 bg-gray-900 border border-gray-700 hover:border-yellow-500 rounded-lg text-xs font-bold text-gray-300 transition-colors">
-            🎭 Scenario 3: 50/50 Split
+            🎭 Scenario 3
           </button>
         </div>
       </div>
