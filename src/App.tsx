@@ -19,7 +19,7 @@ function App() {
   const [activeRole, setActiveRole] = useState<'GUEST' | 'HOST'>('GUEST');
   const [rulesUrl, setRulesUrl] = useState('https://en.wikipedia.org/wiki/Etiquette');
   const [disputeId, setDisputeId] = useState('1');
-  const [evidenceUrl, setEvidenceUrl] = useState('');
+  const [evidenceUrl, setEvidenceUrl] = useState('https://example.com/evidence');
   
   const [disputeData, setDisputeData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -95,6 +95,11 @@ function App() {
   const handleCreateDispute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestClient || !hostAccount) return;
+    if (guestClient.account.address === hostAccount.address) {
+      setErrorMsg('❌ Host and Guest cannot be the same address (you used the same private key for both)');
+      return;
+    }
+    if (!rulesUrl) { setErrorMsg('❌ House Rules URL cannot be empty'); return; }
     setLoading(true); setErrorMsg('');
     setStatusMsg('📝 Signing & submitting create_dispute with 100 GL deposit...');
     
@@ -171,6 +176,7 @@ function App() {
   const handleSubmitEvidence = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeClient) return;
+    if (!evidenceUrl) { setErrorMsg('❌ Evidence URL cannot be empty'); return; }
     setLoading(true); setErrorMsg('');
     setStatusMsg(`📎 Submitting evidence as ${activeRole}...`);
     try {
