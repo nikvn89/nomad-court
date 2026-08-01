@@ -36,13 +36,11 @@ A decentralized Web3 dApp that acts as an **impartial AI jury** for P2P short-te
 - **Atomic settlement** — both payouts execute in a single transaction; if one fails, everything reverts
 - **No embedded signers** — users connect with their own GenLayer private keys
 
-## Test URLs
+## Testing the DApp
 
-| Role | Evidence URL |
-|------|-------------|
-| House Rules | https://en.wikipedia.org/wiki/Etiquette |
-| Host Evidence | https://en.wikipedia.org/wiki/Vandalism |
-| Guest Evidence | https://en.wikipedia.org/wiki/Accident |
+You don't need to manually find or paste URLs anymore! 
+- **Built-in Scenarios:** The DApp includes 3 one-click "Scenario" buttons at the top of the page. Clicking them will automatically pre-fill realistic House Rules and Evidence texts for both Host and Guest.
+- **Raw Text Support:** You can type any raw text directly into the House Rules or Evidence fields. The React frontend will automatically upload your text to a decentralized text-storage provider (bytebin.lucko.me) and pass the generated URL to the Smart Contract behind the scenes!
 
 ## Repository Structure
 
