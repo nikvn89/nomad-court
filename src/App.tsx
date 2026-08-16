@@ -1,40 +1,32 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createClient } from 'genlayer-js';
 import { studionet } from 'genlayer-js/chains';
-import { TransactionStatus, ExecutionResult } from 'genlayer-js/types';
+import { TransactionStatus } from 'genlayer-js/types';
 import { ShieldAlert, Send, Gavel, Scale, Loader2, User, Wallet } from 'lucide-react';
 import './index.css';
 
 declare global {
   interface Window {
     ethereum?: {
-      request: (args: { method: string; params?: unknown[] | object }) => Promise<any>;
-      on?: (event: string, handler: (...args: any[]) => void) => void;
-      removeListener?: (event: string, handler: (...args: any[]) => void) => void;
+      request: (args: { method: string; params?: any }) => Promise<any>;
     };
   }
 }
 
-const CONTRACT_ADDRESS = '0x8f5642c7db691f91e29A22104aD856Cfb00e1D22';
+const CONTRACT_ADDRESS = '0x9C1eB73167FAfECeAd0FD046e0b54020D34250a7';
+const EXPLORER_BASE = 'https://explorer-studio.genlayer.com';
 
 type Role = 'GUEST' | 'HOST';
 
-function executionName(receipt: any) {
-  return (
-    receipt?.txExecutionResultName ??
-    receipt?.tx_execution_result_name ??
-    receipt?.executionResultName ??
-    receipt?.execution_result_name ??
-    ''
-  );
-}
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function executionFailed(receipt: any) {
-  const name = executionName(receipt);
+function isRateLimitError(err: any) {
+  const text = String(err?.message ?? err ?? '').toLowerCase();
   return (
-    name === ExecutionResult.FINISHED_WITH_ERROR ||
-    name === 'FINISHED_WITH_ERROR' ||
-    name === 'ERROR'
+    text.includes('rate limit') ||
+    text.includes('rate limited') ||
+    text.includes('429') ||
+    text.includes('failed to fetch')
   );
 }
 
@@ -51,33 +43,28 @@ function decodeHexUtf8(hex: string) {
   }
 }
 
-function findReturnedString(value: any, depth = 0): string | null {
-  if (depth > 6 || value == null) return null;
+function findReturnedId(value: any, depth = 0): string | null {
+  if (value == null || depth > 8) return null;
 
   if (typeof value === 'string') {
-    const text = value.trim();
-    if (/^\d+$/.test(text)) return text;
+    const t = value.trim();
+    if (/^\d+$/.test(t)) return t;
 
     try {
-      const parsed = JSON.parse(text);
-      if (typeof parsed === 'string' && parsed) return parsed;
+      const parsed = JSON.parse(t);
+      if (typeof parsed === 'string' && /^\d+$/.test(parsed.trim())) {
+        return parsed.trim();
+      }
     } catch {}
 
-    const decoded = decodeHexUtf8(text);
-    const match = decoded.match(/^\s*"?(\d+)"?\s*$/);
-    if (match) return match[1];
-
-    try {
-      const parsed = JSON.parse(decoded);
-      if (typeof parsed === 'string' && parsed) return parsed;
-    } catch {}
-
-    return null;
+    const decoded = decodeHexUtf8(t);
+    const m = decoded.match(/^\s*"?(\d+)"?\s*$/);
+    return m?.[1] ?? null;
   }
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found = findReturnedString(item, depth + 1);
+      const found = findReturnedId(item, depth + 1);
       if (found) return found;
     }
     return null;
@@ -91,27 +78,23 @@ function findReturnedString(value: any, depth = 0): string | null {
       'return_data',
       'output',
       'result',
-      'txExecutionResult',
-      'tx_execution_result',
       'executionResult',
       'execution_result',
+      'txExecutionResult',
+      'tx_execution_result',
+      'data',
     ]) {
       if (key in value) {
-        const found = findReturnedString(value[key], depth + 1);
+        const found = findReturnedId(value[key], depth + 1);
         if (found) return found;
       }
-    }
-
-    for (const child of Object.values(value)) {
-      const found = findReturnedString(child, depth + 1);
-      if (found) return found;
     }
   }
 
   return null;
 }
 
-function App() {
+export default function App() {
   const [hostAddress, setHostAddress] = useState('');
   const [guestAddress, setGuestAddress] = useState('');
   const [activeRole, setActiveRole] = useState<Role>('GUEST');
@@ -119,81 +102,121 @@ function App() {
   const [rulesUrl, setRulesUrl] = useState('');
   const [disputeId, setDisputeId] = useState('');
   const [evidenceUrl, setEvidenceUrl] = useState('');
-
   const [disputeData, setDisputeData] = useState<any>(null);
+
   const [loading, setLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const readClient = useMemo(() => createClient({ chain: studionet }), []);
+  const proxyRpc =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/api/rpc`
+      : '/api/rpc';
 
-  const connected = Boolean(hostAddress || guestAddress);
+  // ALL reads/finalization checks go through Vercel proxy.
+  const readClient = useMemo(
+    () => createClient({ endpoint: proxyRpc }),
+    [proxyRpc],
+  );
+
   const activeAddress = activeRole === 'HOST' ? hostAddress : guestAddress;
 
-  useEffect(() => {
-    setEvidenceUrl('');
-  }, [activeRole]);
+  async function ensureStudioNetInMetaMask() {
+    if (!window.ethereum) throw new Error('MetaMask was not detected');
 
-  const makeWalletClient = async (expectedAddress?: string) => {
-    if (!window.ethereum) {
-      throw new Error('MetaMask was not detected');
+    const chainId = Number((studionet as any).id);
+    const chainIdHex = `0x${chainId.toString(16)}`;
+
+    const params = {
+      chainId: chainIdHex,
+      chainName: (studionet as any).name || 'GenLayer StudioNet',
+      nativeCurrency: { name: 'GEN', symbol: 'GEN', decimals: 18 },
+      rpcUrls: [proxyRpc],
+      blockExplorerUrls: [EXPLORER_BASE],
+    };
+
+    try {
+      // Calling add first gives MetaMask the proxied RPC URL.
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [params],
+      });
+    } catch {
+      // Existing network is fine; switch below.
     }
 
-    const accounts: string[] = await window.ethereum.request({
-      method: 'eth_requestAccounts',
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: chainIdHex }],
     });
+  }
 
-    const current = accounts?.[0];
-    if (!current) throw new Error('No MetaMask account selected');
-
-    if (
-      expectedAddress &&
-      current.toLowerCase() !== expectedAddress.toLowerCase()
-    ) {
-      throw new Error(
-        `Switch MetaMask to ${expectedAddress} before continuing. Current account is ${current}.`,
-      );
-    }
-
-    const client = createClient({
-      chain: studionet,
-      account: current as `0x${string}`,
-      provider: window.ethereum,
-    });
-
-    // Current GenLayerJS can switch/add StudioNet itself. No hand-written
-    // chainId/RPC constants are needed in the app.
-    await client.connect('studionet');
-
-    return { client, address: current };
-  };
-
-  const connectActiveRole = async () => {
+  async function connectActiveRole() {
     setErrorMsg('');
     setStatusMsg('');
 
     try {
-      const { address } = await makeWalletClient();
+      if (!window.ethereum) throw new Error('MetaMask was not detected');
 
-      if (activeRole === 'HOST') {
-        if (guestAddress && guestAddress.toLowerCase() === address.toLowerCase()) {
-          throw new Error('Host and Guest must use different addresses');
-        }
-        setHostAddress(address);
-      } else {
-        if (hostAddress && hostAddress.toLowerCase() === address.toLowerCase()) {
-          throw new Error('Host and Guest must use different addresses');
-        }
-        setGuestAddress(address);
+      await ensureStudioNetInMetaMask();
+
+      const accounts: string[] = await window.ethereum.request({
+        method: 'eth_requestAccounts',
+      });
+
+      const address = accounts?.[0];
+      if (!address) throw new Error('No MetaMask account selected');
+
+      if (
+        activeRole === 'HOST' &&
+        guestAddress &&
+        guestAddress.toLowerCase() === address.toLowerCase()
+      ) {
+        throw new Error('Host and Guest must use different addresses');
       }
+
+      if (
+        activeRole === 'GUEST' &&
+        hostAddress &&
+        hostAddress.toLowerCase() === address.toLowerCase()
+      ) {
+        throw new Error('Host and Guest must use different addresses');
+      }
+
+      if (activeRole === 'HOST') setHostAddress(address);
+      else setGuestAddress(address);
 
       setStatusMsg(`✅ ${activeRole} wallet assigned: ${address}`);
     } catch (err: any) {
       setErrorMsg(`❌ Wallet connection failed: ${err.message}`);
     }
-  };
+  }
 
-  const parseDispute = (raw: any) => {
+  async function getWalletClient(expected: string) {
+    if (!window.ethereum) throw new Error('MetaMask was not detected');
+
+    await ensureStudioNetInMetaMask();
+
+    const accounts: string[] = await window.ethereum.request({
+      method: 'eth_accounts',
+    });
+
+    const current = accounts?.[0];
+    if (!current) throw new Error('No active MetaMask account');
+
+    if (current.toLowerCase() !== expected.toLowerCase()) {
+      throw new Error(`Switch MetaMask to ${expected} before continuing`);
+    }
+
+    return createClient({
+      chain: studionet,
+      account: current as `0x${string}`,
+      provider: window.ethereum,
+    });
+  }
+
+  function parseDispute(raw: any) {
     const text =
       typeof raw === 'string'
         ? raw
@@ -201,23 +224,15 @@ function App() {
           ? raw.result
           : '';
 
-    if (!text || text === '{}') {
-      throw new Error('Dispute does not exist or returned empty data');
-    }
+    if (!text || text === '{}') throw new Error('Dispute not found');
 
     const parsed = JSON.parse(text);
     if (!parsed?.host) throw new Error('Malformed dispute response');
     return parsed;
-  };
+  }
 
-  const fetchDispute = async (id = disputeId) => {
-    if (!id) {
-      setDisputeData(null);
-      setErrorMsg('❌ No dispute ID selected');
-      return null;
-    }
-
-    setErrorMsg('');
+  async function fetchDispute(id = disputeId, quiet = false) {
+    if (!id) return null;
 
     try {
       const raw = await readClient.readContract({
@@ -230,70 +245,77 @@ function App() {
       setDisputeData(parsed);
       return parsed;
     } catch (err: any) {
-      // Never fabricate host/guest/deposit/share values.
-      setDisputeData(null);
-      setErrorMsg(`❌ Could not load dispute #${id}: ${err.message}`);
+      if (!quiet) {
+        setDisputeData(null);
+        setErrorMsg(`❌ Could not load dispute #${id}: ${err.message}`);
+      }
       return null;
     }
-  };
+  }
 
-  const waitFinalized = async (hash: `0x${string}`, retries = 45) => {
-    const receipt = await readClient.waitForTransactionReceipt({
-      hash,
-      status: TransactionStatus.FINALIZED,
-      fullTransaction: true,
-      interval: 4_000,
-      retries,
-    });
+  async function waitForFinalized(hash: `0x${string}`, maxMinutes = 5) {
+    const deadline = Date.now() + maxMinutes * 60_000;
 
-    if (executionFailed(receipt)) {
-      throw new Error(`Transaction reverted (${executionName(receipt)})`);
+    // One SDK waiter, via proxy. No browser-side tight raw RPC loop.
+    while (Date.now() < deadline) {
+      try {
+        return await readClient.waitForTransactionReceipt({
+          hash,
+          status: TransactionStatus.FINALIZED,
+          fullTransaction: true,
+          interval: 12_000,
+          retries: 1,
+        });
+      } catch (err: any) {
+        if (!isRateLimitError(err)) {
+          // Some SDK versions throw while tx is still pending.
+          await sleep(12_000);
+          continue;
+        }
+        await sleep(18_000);
+      }
     }
 
-    return receipt;
-  };
+    throw new Error('Finalization timed out. Transaction may still finalize on StudioNet.');
+  }
 
-  const deriveDisputeId = async (
-    hash: `0x${string}`,
-    receipt: any,
-  ) => {
-    let returnedId = findReturnedString(receipt);
-    if (returnedId) return returnedId;
+  async function deriveCreatedId(hash: `0x${string}`, receipt: any) {
+    let id = findReturnedId(receipt);
+    if (id) return id;
 
-    const trace = await readClient.debugTraceTransaction({
-      hash,
-      round: 0,
-    });
+    // Safe fallback: query confirmed tx object through proxy, never probe IDs.
+    try {
+      const tx = await readClient.getTransaction({ hash });
+      id = findReturnedId(tx);
+      if (id) return id;
+    } catch {}
 
-    returnedId = findReturnedString(
-      (trace as any)?.return_data ?? (trace as any)?.returnData ?? trace,
-    );
+    throw new Error('Could not decode the returned dispute ID from the confirmed creation transaction');
+  }
 
-    if (!returnedId) {
-      throw new Error(
-        'create_dispute finalized but its returned dispute ID could not be decoded',
-      );
+  async function uploadTextIfNeeded(value: string) {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
     }
 
-    return returnedId;
-  };
+    const res = await fetch('https://bytebin.lucko.me/post', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: trimmed,
+    });
 
-  const ensureRoleClient = async (role: Role) => {
-    const expected = role === 'HOST' ? hostAddress : guestAddress;
-    if (!expected) throw new Error(`${role} wallet has not been assigned`);
-    const { client } = await makeWalletClient(expected);
-    return client;
-  };
+    if (!res.ok) throw new Error(`Bytebin upload failed (${res.status})`);
+    const json = await res.json();
+    return `https://bytebin.lucko.me/${json.key}`;
+  }
 
-  const handleCreateDispute = async (e: React.FormEvent) => {
+  async function handleCreateDispute(e: React.FormEvent) {
     e.preventDefault();
 
+    if (loading) return;
     if (!hostAddress || !guestAddress) {
       setErrorMsg('❌ Assign both Host and Guest wallets first');
-      return;
-    }
-    if (hostAddress.toLowerCase() === guestAddress.toLowerCase()) {
-      setErrorMsg('❌ Host and Guest must be different addresses');
       return;
     }
     if (!rulesUrl.trim()) {
@@ -302,25 +324,14 @@ function App() {
     }
 
     setLoading(true);
+    setPendingAction('create');
     setErrorMsg('');
 
     try {
-      const guestClient = await ensureRoleClient('GUEST');
+      const guestClient = await getWalletClient(guestAddress);
+      const finalRulesUrl = await uploadTextIfNeeded(rulesUrl);
 
-      let finalRulesUrl = rulesUrl.trim();
-      if (!finalRulesUrl.startsWith('http')) {
-        setStatusMsg('⏳ Uploading custom rules text to Bytebin...');
-        const res = await fetch('https://bytebin.lucko.me/post', {
-          method: 'POST',
-          body: finalRulesUrl,
-          headers: { 'Content-Type': 'text/plain' },
-        });
-        if (!res.ok) throw new Error(`Bytebin upload failed (${res.status})`);
-        const json = await res.json();
-        finalRulesUrl = `https://bytebin.lucko.me/${json.key}`;
-      }
-
-      setStatusMsg('📝 MetaMask: sign create_dispute with 10 GEN deposit...');
+      setStatusMsg('📝 Sign create_dispute in MetaMask. Submit once only.');
       const hash = await guestClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_dispute',
@@ -328,30 +339,41 @@ function App() {
         value: 10_000_000_000_000_000_000n,
       });
 
-      setStatusMsg(`⏳ Submitted ${hash}. Waiting for FINALIZED...`);
-      const receipt = await waitFinalized(hash as `0x${string}`);
+      // Submission success is separated from finalization.
+      setStatusMsg(`📨 Submitted: ${hash}. Waiting for FINALIZED...`);
 
-      const returnedId = await deriveDisputeId(
-        hash as `0x${string}`,
-        receipt,
-      );
+      const receipt = await waitForFinalized(hash as `0x${string}`, 5);
+      const returnedId = await deriveCreatedId(hash as `0x${string}`, receipt);
 
       setDisputeId(returnedId);
-      await fetchDispute(returnedId);
+      await fetchDispute(returnedId, true);
+
       setStatusMsg(`✅ New dispute finalized. Returned Case ID: ${returnedId}`);
     } catch (err: any) {
-      setErrorMsg(`❌ Create dispute failed: ${err.message}`);
+      if (isRateLimitError(err)) {
+        setErrorMsg(
+          '❌ StudioNet RPC is rate-limited. No automatic resubmit was performed. Wait a moment, Refresh state, then retry only if no transaction was submitted.',
+        );
+      } else {
+        setErrorMsg(`❌ Create dispute failed: ${err.message}`);
+      }
       setStatusMsg('');
     } finally {
+      setPendingAction('');
       setLoading(false);
     }
-  };
+  }
 
-  const handleSubmitEvidence = async (e: React.FormEvent) => {
+  async function handleSubmitEvidence(e: React.FormEvent) {
     e.preventDefault();
 
+    if (loading) return;
     if (!disputeId) {
-      setErrorMsg('❌ Create or enter a real dispute ID first');
+      setErrorMsg('❌ No real dispute ID selected');
+      return;
+    }
+    if (!activeAddress) {
+      setErrorMsg(`❌ Assign the ${activeRole} wallet first`);
       return;
     }
     if (!evidenceUrl.trim()) {
@@ -359,189 +381,203 @@ function App() {
       return;
     }
 
+    // Prevent accidental duplicate submit based on real chain state.
+    const before = await fetchDispute(disputeId, true);
+    const alreadySubmitted =
+      activeRole === 'HOST'
+        ? Boolean(before?.host_evidence_url)
+        : Boolean(before?.guest_evidence_url);
+
+    if (alreadySubmitted) {
+      setErrorMsg(`❌ ${activeRole} evidence is already finalized for Case #${disputeId}`);
+      return;
+    }
+
     setLoading(true);
+    setPendingAction('evidence');
     setErrorMsg('');
 
     try {
-      const activeClient = await ensureRoleClient(activeRole);
+      const client = await getWalletClient(activeAddress);
+      const finalEvidenceUrl = await uploadTextIfNeeded(evidenceUrl);
 
-      let finalEvidenceUrl = evidenceUrl.trim();
-      if (!finalEvidenceUrl.startsWith('http')) {
-        setStatusMsg('⏳ Uploading custom evidence to Bytebin...');
-        const res = await fetch('https://bytebin.lucko.me/post', {
-          method: 'POST',
-          body: finalEvidenceUrl,
-          headers: { 'Content-Type': 'text/plain' },
-        });
-        if (!res.ok) throw new Error(`Bytebin upload failed (${res.status})`);
-        const json = await res.json();
-        finalEvidenceUrl = `https://bytebin.lucko.me/${json.key}`;
-      }
-
-      setStatusMsg(`📎 MetaMask: submit evidence as ${activeRole}...`);
-      const hash = await activeClient.writeContract({
+      setStatusMsg(`📎 Sign ${activeRole} evidence in MetaMask. Submit once only.`);
+      const hash = await client.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'submit_evidence',
         args: [disputeId, finalEvidenceUrl],
       });
 
-      await waitFinalized(hash as `0x${string}`, 30);
-      await fetchDispute(disputeId);
-      setStatusMsg(`✅ ${activeRole} evidence finalized. Tx: ${hash}`);
-    } catch (err: any) {
-      setErrorMsg(`❌ Evidence transaction failed: ${err.message}`);
-      setStatusMsg('');
-    } finally {
-      setLoading(false);
-    }
-  };
+      setStatusMsg(`📨 ${activeRole} evidence submitted: ${hash}. Waiting for FINALIZED...`);
 
-  const resolveOnce = async () => {
-    const activeClient = await ensureRoleClient(activeRole);
+      // IMPORTANT: no fake UI update before chain finalization.
+      await waitForFinalized(hash as `0x${string}`, 4);
 
-    const hash = await activeClient.writeContract({
-      address: CONTRACT_ADDRESS,
-      functionName: 'resolve_dispute',
-      args: [disputeId],
-    });
+      const state = await fetchDispute(disputeId, true);
+      const persisted =
+        activeRole === 'HOST'
+          ? Boolean(state?.host_evidence_url)
+          : Boolean(state?.guest_evidence_url);
 
-    try {
-      const receipt = await waitFinalized(hash as `0x${string}`, 45);
-      return { hash, receipt, undetermined: false };
-    } catch (err: any) {
-      let tx: any = null;
-      try {
-        tx = await readClient.getTransaction({ hash });
-      } catch {}
-
-      const state = String(
-        tx?.statusName ?? tx?.status_name ?? tx?.status ?? '',
-      ).toUpperCase();
-
-      if (state.includes('UNDETERMINED')) {
-        return { hash, receipt: null, undetermined: true };
+      if (!persisted) {
+        throw new Error('Transaction finalized but evidence is not present in accepted state');
       }
 
-      // A real revert is surfaced, not converted into a retry message.
-      throw err;
+      setStatusMsg(`✅ ${activeRole} evidence finalized. Tx: ${hash}`);
+    } catch (err: any) {
+      if (isRateLimitError(err)) {
+        setErrorMsg(
+          '❌ StudioNet RPC is rate-limited. The app did NOT automatically resubmit. Click Refresh first; retry only if your evidence is still missing.',
+        );
+      } else {
+        setErrorMsg(`❌ Evidence transaction failed: ${err.message}`);
+      }
+      setStatusMsg('');
+    } finally {
+      setPendingAction('');
+      setLoading(false);
     }
-  };
+  }
 
-  const handleResolve = async (e: React.FormEvent) => {
+  async function handleResolve(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!disputeId) {
-      setErrorMsg('❌ No dispute ID selected');
+    if (loading) return;
+    if (!disputeId || !activeAddress) return;
+
+    const before = await fetchDispute(disputeId, true);
+    if (!before) {
+      setErrorMsg('❌ Could not load current dispute state');
+      return;
+    }
+    if (before.status === 'RESOLVED') {
+      setErrorMsg('❌ This dispute is already RESOLVED');
+      return;
+    }
+    if (!before.host_evidence_url || !before.guest_evidence_url) {
+      setErrorMsg('❌ Both Host and Guest evidence are required');
       return;
     }
 
     setLoading(true);
+    setPendingAction('resolve');
     setErrorMsg('');
 
     try {
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        setStatusMsg(
-          `🤖 AI Jury resolution attempt ${attempt}/3. MetaMask may prompt; finalization can take 30–60s.`,
-        );
+      const client = await getWalletClient(activeAddress);
 
-        const result = await resolveOnce();
+      setStatusMsg('🤖 Sign resolution transaction. AI consensus may take 30–60s+.');
+      const hash = await client.writeContract({
+        address: CONTRACT_ADDRESS,
+        functionName: 'resolve_dispute',
+        args: [disputeId],
+      });
 
-        if (result.undetermined) {
-          if (attempt < 3) continue;
-          throw new Error('Consensus remained UNDETERMINED after 3 attempts');
+      setStatusMsg(`📨 Resolution submitted: ${hash}. Waiting for consensus/finalization...`);
+
+      await waitForFinalized(hash as `0x${string}`, 6);
+
+      // State is the final truth. Do not infer success from receipt.status alone.
+      for (let i = 0; i < 12; i++) {
+        const state = await fetchDispute(disputeId, true);
+        if (state?.status === 'RESOLVED') {
+          setStatusMsg(`✅ RESOLVED. Native GEN settlement finalized. Tx: ${hash}`);
+          return;
         }
-
-        const state = await fetchDispute(disputeId);
-        if (!state || state.status !== 'RESOLVED') {
-          throw new Error(
-            'Resolution transaction finalized but contract state is not RESOLVED',
-          );
-        }
-
-        setStatusMsg(`✅ Resolved and settled atomically. Tx: ${result.hash}`);
-        return;
+        await sleep(10_000);
       }
+
+      throw new Error('Transaction finalized but RESOLVED state was not observed');
     } catch (err: any) {
-      setErrorMsg(`❌ Resolution failed: ${err.message}`);
+      if (isRateLimitError(err)) {
+        setErrorMsg(
+          '❌ StudioNet RPC is rate-limited. Resolution was NOT automatically resubmitted. Refresh Case Status first to avoid double-resolving.',
+        );
+      } else {
+        setErrorMsg(`❌ Resolution failed: ${err.message}`);
+      }
       setStatusMsg('');
     } finally {
+      setPendingAction('');
       setLoading(false);
     }
-  };
+  }
 
-  const resetDemo = () => {
+  function resetDemo() {
     setRulesUrl('');
     setEvidenceUrl('');
     setDisputeId('');
     setDisputeData(null);
     setStatusMsg('');
     setErrorMsg('');
-  };
+  }
 
-  const loadScenario = (type: 1 | 2 | 3) => {
+  function loadScenario(type: 1 | 2 | 3) {
     if (type === 1) {
-      setRulesUrl(
-        '1. No parties allowed. Penalty: 100% of deposit.\n2. Quiet hours after 10 PM.',
-      );
+      setRulesUrl('1. No parties allowed. Penalty: 100% of deposit.\n2. Quiet hours after 10 PM.');
       setEvidenceUrl(
         activeRole === 'HOST'
           ? 'The neighbors called the police at 1 AM because of loud club music. The guest brought 15 strangers for a party. I request the full deposit as penalty.'
           : "I did not host a party. It was just a 'study group' with 15 friends. We accidentally played music a bit too loud. Please return my deposit!",
       );
     } else if (type === 2) {
-      setRulesUrl(
-        'Deposit fully refunded if check-out is on time (by 12 PM) and no furniture is broken. Standard cleaning fee is already included in the rent.',
-      );
+      setRulesUrl('Deposit fully refunded if check-out is on time (by 12 PM) and no furniture is broken. Standard cleaning fee is already included in the rent.');
       setEvidenceUrl(
         activeRole === 'HOST'
-          ? "The guest checked out on time and furniture is intact. However, they left 2 trash bags in the kitchen instead of taking them to the public bin. I suffered emotional damage from this mess, so I am confiscating the entire deposit!"
-          : "I cleaned up and checked out at 11 AM. The rules state standard cleaning is included, so leaving trash bags in the kitchen is normal. The host's demand for the full deposit due to 'emotional damage' is ridiculous. Give me my money back!",
+          ? "The guest checked out on time and furniture is intact. They left 2 trash bags in the kitchen. I request the deposit."
+          : "I cleaned up and checked out at 11 AM. Standard cleaning is included in the rules. Please return my deposit.",
       );
     } else {
-      setRulesUrl(
-        'Pets allowed. However, guests must maintain cleanliness and pay for any damages caused by their pets.',
-      );
+      setRulesUrl('Pets allowed. Guests must maintain cleanliness and pay for damages caused by pets.');
       setEvidenceUrl(
         activeRole === 'HOST'
-          ? "The guest's dog bit a small hole in my old sofa. Even though it's an old sofa, I cherish it. I demand 100% of the deposit so I can buy a brand new sofa!"
-          : "I admit my dog caused a small scratch on the sofa. But that sofa was already heavily worn and torn before I arrived! I agree to pay 20% of the deposit for the scratch, but taking 100% to buy a brand new sofa is a scam!",
+          ? "The guest's dog damaged the sofa. I request compensation from the deposit."
+          : 'My dog caused a small scratch, but the sofa was already heavily worn. A limited deduction is appropriate.',
       );
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-[#0a0a14] text-white p-8 font-sans selection:bg-purple-500/30">
+    <div className="min-h-screen bg-[#0a0a14] text-white p-8 font-sans">
       <div className="max-w-5xl mx-auto flex flex-col items-center mb-8 space-y-4">
         <div className="bg-purple-500/10 p-4 rounded-full border border-purple-500/20">
           <Scale className="w-10 h-10 text-purple-400" />
         </div>
-        <h1 className="text-5xl font-black tracking-tight bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+
+        <h1 className="text-5xl font-black bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
           NomadCourt
         </h1>
 
         <div className="flex gap-3">
           <button
             onClick={() => setActiveRole('GUEST')}
-            className={`px-4 py-2 rounded-full font-bold flex items-center gap-2 border ${
+            disabled={loading}
+            className={`px-4 py-2 rounded-full font-bold border ${
               activeRole === 'GUEST'
                 ? 'bg-cyan-500 text-black border-cyan-500'
                 : 'text-cyan-500 border-cyan-500/50'
             }`}
           >
-            <User className="w-4 h-4" /> Guest
+            <User className="w-4 h-4 inline mr-2" />
+            Guest
           </button>
+
           <button
             onClick={() => setActiveRole('HOST')}
-            className={`px-4 py-2 rounded-full font-bold flex items-center gap-2 border ${
+            disabled={loading}
+            className={`px-4 py-2 rounded-full font-bold border ${
               activeRole === 'HOST'
                 ? 'bg-purple-500 text-white border-purple-500'
                 : 'text-purple-500 border-purple-500/50'
             }`}
           >
-            <User className="w-4 h-4" /> Host
+            <User className="w-4 h-4 inline mr-2" />
+            Host
           </button>
+
           <button
             onClick={resetDemo}
+            disabled={loading}
             className="px-4 py-2 rounded-full font-bold border border-gray-600 text-gray-400"
           >
             Start New Case
@@ -551,24 +587,25 @@ function App() {
         <button
           onClick={connectActiveRole}
           disabled={loading}
-          className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-500 font-black flex gap-2 items-center"
+          className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-500 font-black"
         >
-          <Wallet className="w-4 h-4" />
+          <Wallet className="w-4 h-4 inline mr-2" />
           Connect / Assign Current MetaMask as {activeRole}
         </button>
 
-        <div className="text-xs font-mono text-gray-500 text-center space-y-1">
+        <div className="text-xs font-mono text-gray-500 text-center">
           <div>Host: {hostAddress || 'not assigned'}</div>
           <div>Guest: {guestAddress || 'not assigned'}</div>
-          <div>Active role: {activeRole} — {activeAddress || 'wallet not assigned'}</div>
+          <div>Active role: {activeRole} — {activeAddress || 'not assigned'}</div>
         </div>
 
-        <div className="flex flex-wrap gap-3 justify-center">
+        <div className="flex gap-3">
           {[1, 2, 3].map((n) => (
             <button
               key={n}
+              disabled={loading}
               onClick={() => loadScenario(n as 1 | 2 | 3)}
-              className="px-3 py-1.5 bg-gray-900 border border-gray-700 hover:border-cyan-500 rounded-lg text-xs font-bold text-gray-300"
+              className="px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-xs"
             >
               🎭 Scenario {n}
             </button>
@@ -577,10 +614,11 @@ function App() {
       </div>
 
       {statusMsg && (
-        <div className="glass-panel p-4 text-center text-sm font-medium text-purple-300 max-w-5xl mx-auto mb-4">
+        <div className="glass-panel p-4 text-center text-sm text-purple-300 max-w-5xl mx-auto mb-4">
           {statusMsg}
         </div>
       )}
+
       {errorMsg && (
         <div className="max-w-5xl mx-auto mb-4 p-4 text-center text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg">
           {errorMsg}
@@ -590,66 +628,67 @@ function App() {
       <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
         <div className="space-y-6">
           <div className={`glass-panel p-6 space-y-4 ${activeRole !== 'GUEST' ? 'opacity-50 pointer-events-none' : ''}`}>
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-cyan-400" />
+            <h2 className="text-xl font-bold">
+              <ShieldAlert className="w-5 h-5 text-cyan-400 inline mr-2" />
               1. Open New Dispute (Guest Only)
             </h2>
+
             <form onSubmit={handleCreateDispute} className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Host Address</label>
-                <input
-                  readOnly
-                  value={hostAddress}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4 text-gray-500 font-mono text-xs"
-                />
-              </div>
+              <input
+                readOnly
+                value={hostAddress}
+                className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4"
+                placeholder="Assign Host first"
+              />
+
               <textarea
-                required
                 value={rulesUrl}
                 onChange={(e) => setRulesUrl(e.target.value)}
                 rows={4}
                 className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4"
                 placeholder="House Rules URL or raw text"
               />
+
               <button
                 disabled={loading || !hostAddress || !guestAddress}
-                className="w-full bg-cyan-500 text-black font-bold py-2 rounded-lg flex justify-center"
+                className="w-full bg-cyan-500 text-black font-bold py-2 rounded-lg"
               >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Start Case (Lock 10 GEN Deposit)'}
+                {loading && pendingAction === 'create'
+                  ? <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                  : 'Start Case (Lock 10 GEN Deposit)'}
               </button>
             </form>
           </div>
 
           <div className="glass-panel p-6 space-y-4">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Send className="w-5 h-5 text-purple-400" />
+            <h2 className="text-xl font-bold">
+              <Send className="w-5 h-5 text-purple-400 inline mr-2" />
               2. Submit Evidence
             </h2>
+
             <form onSubmit={handleSubmitEvidence} className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">
-                  Dispute ID — returned by create_dispute
-                </label>
-                <input
-                  value={disputeId}
-                  onChange={(e) => setDisputeId(e.target.value.trim())}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4"
-                  placeholder="Create a case, or enter an explicit known ID"
-                />
-              </div>
+              <input
+                value={disputeId}
+                onChange={(e) => setDisputeId(e.target.value.trim())}
+                className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4"
+                placeholder="Case ID returned by create_dispute"
+              />
+
               <textarea
-                required
                 value={evidenceUrl}
                 onChange={(e) => setEvidenceUrl(e.target.value)}
                 rows={4}
                 className="w-full bg-gray-950 border border-gray-800 rounded-lg py-2 px-4"
                 placeholder={`Evidence URL or raw text as ${activeRole}`}
               />
+
               <button
                 disabled={loading || !disputeId || !activeAddress}
-                className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 rounded-lg"
+                className="w-full bg-purple-500 text-white font-bold py-2 rounded-lg"
               >
-                Attach Evidence
+                {loading && pendingAction === 'evidence'
+                  ? <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                  : 'Attach Evidence'}
               </button>
             </form>
           </div>
@@ -660,8 +699,8 @@ function App() {
             <h2 className="text-xl font-bold">Case Status</h2>
             <button
               onClick={() => fetchDispute()}
-              disabled={!disputeId}
-              className="text-sm text-cyan-400 hover:underline disabled:opacity-40"
+              disabled={!disputeId || loading}
+              className="text-sm text-cyan-400 disabled:opacity-40"
             >
               Refresh
             </button>
@@ -669,20 +708,14 @@ function App() {
 
           {disputeData ? (
             <div className="flex-1 flex flex-col space-y-6">
-              <div className="flex justify-between items-center border-b border-gray-800 pb-4">
+              <div className="flex justify-between border-b border-gray-800 pb-4">
                 <span className="text-gray-400">Status</span>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  disputeData.status === 'OPEN'
-                    ? 'bg-yellow-500/20 text-yellow-300'
-                    : 'bg-green-500/20 text-green-300'
-                }`}>
-                  {disputeData.status}
-                </span>
+                <span>{disputeData.status}</span>
               </div>
 
-              <div className="space-y-2 text-sm text-gray-400 border-b border-gray-800 pb-4">
-                <div className="truncate"><b className="text-purple-400">Host:</b> {disputeData.host}</div>
-                <div className="truncate"><b className="text-cyan-400">Guest:</b> {disputeData.guest}</div>
+              <div className="space-y-2 text-sm text-gray-400">
+                <div><b className="text-purple-400">Host:</b> {disputeData.host}</div>
+                <div><b className="text-cyan-400">Guest:</b> {disputeData.guest}</div>
                 <div>Deposit: {disputeData.deposit_amount}</div>
                 <div>Host evidence: {disputeData.host_evidence_url ? '✅' : '⏳'}</div>
                 <div>Guest evidence: {disputeData.guest_evidence_url ? '✅' : '⏳'}</div>
@@ -693,6 +726,7 @@ function App() {
                   <div className="text-sm text-gray-400">Host Payout</div>
                   <div className="text-2xl font-black">{disputeData.host_share}%</div>
                 </div>
+
                 <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800">
                   <div className="text-sm text-gray-400">Guest Payout</div>
                   <div className="text-2xl font-black">{disputeData.guest_share}%</div>
@@ -700,13 +734,8 @@ function App() {
               </div>
 
               {disputeData.rationale && (
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
-                  <div className="text-sm font-bold text-blue-400 mb-2">
-                    ⚖️ AI Jury Rationale
-                  </div>
-                  <div className="text-sm text-blue-200 italic">
-                    "{disputeData.rationale}"
-                  </div>
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 text-sm">
+                  {disputeData.rationale}
                 </div>
               )}
 
@@ -719,22 +748,19 @@ function App() {
                   !activeAddress
                 }
                 onClick={handleResolve}
-                className="mt-auto w-full bg-gradient-to-r from-cyan-500 to-purple-500 text-white font-black py-4 rounded-xl flex justify-center items-center gap-2 disabled:opacity-50"
+                className="mt-auto w-full bg-gradient-to-r from-cyan-500 to-purple-500 text-white font-black py-4 rounded-xl"
               >
-                {loading ? (
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                ) : (
-                  <>
-                    <Gavel className="w-6 h-6" />
-                    Trigger AI Resolution
-                  </>
-                )}
+                {loading && pendingAction === 'resolve'
+                  ? <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                  : <>
+                      <Gavel className="w-6 h-6 inline mr-2" />
+                      Trigger AI Resolution
+                    </>}
               </button>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-500 space-y-4">
-              <Scale className="w-16 h-16 opacity-20" />
-              <p>No fabricated state. Create a case or enter a known dispute ID.</p>
+            <div className="flex-1 flex items-center justify-center text-gray-500">
+              No fabricated state. Create a case or enter a known dispute ID.
             </div>
           )}
         </div>
@@ -742,5 +768,3 @@ function App() {
     </div>
   );
 }
-
-export default App;
