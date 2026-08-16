@@ -21,7 +21,7 @@ Questions such as:
 
 require interpretation of natural-language rules and unstructured evidence.
 
-Traditional smart contracts cannot reliably make these qualitative judgments.
+Traditional deterministic smart contracts cannot reliably make these qualitative judgments.
 
 ---
 
@@ -109,7 +109,7 @@ The frontend derives that ID from the confirmed creation transaction instead of 
 
 The frontend displays only state returned from `get_dispute()`.
 
-Failed reads are surfaced as errors rather than replaced with placeholder dispute data.
+Failed reads are surfaced as errors rather than replaced with fabricated placeholder dispute data.
 
 ### Atomic Settlement
 
@@ -158,7 +158,7 @@ RESOLVED
 
 ## Assertion Test Suite
 
-NomadCourt includes an asserting integration suite:
+NomadCourt includes a real asserting integration suite:
 
 ```text
 scripts/test_flow.js
@@ -213,7 +213,7 @@ PASS: premature resolution rejected / rolled back
 PASS: rollback preserved OPEN status and zero payout shares
 ```
 
-This verifies failed resolution does not leave partial state changes.
+This verifies that a failed resolution does not leave partial state changes.
 
 ### TEST 4 — Settlement and Balance Conservation
 
@@ -241,23 +241,30 @@ Final result:
 ✅ ALL TESTS PASSED
 ```
 
+The test suite does not treat reverted transactions as successful tests unless a revert is explicitly required by that test case.
+
+Any failed assertion terminates the process with a non-zero exit status.
+
 ---
 
-## Live End-to-End Test
+## Live End-to-End Tests
 
-The production frontend was also tested using two real MetaMask accounts on GenLayer StudioNet.
+The production frontend was tested end-to-end using separate Host and Guest MetaMask accounts on GenLayer StudioNet.
 
-Test scenario:
+Both tests used real on-chain evidence submission, GenLayer AI-validator consensus, and native GEN settlement.
+
+### Case 2 — Host Receives 100%
+
+House rules:
 
 ```text
-House Rules:
 1. No parties allowed. Penalty: 100% of deposit.
 2. Quiet hours after 10 PM.
 ```
 
-Both Host and Guest submitted their evidence independently.
+Both Host and Guest independently submitted evidence.
 
-GenLayer AI consensus concluded that the evidence supported a prohibited party and quiet-hours violation.
+The AI jury concluded that the evidence supported a prohibited party and quiet-hours violation.
 
 Final state:
 
@@ -273,13 +280,51 @@ Host Payout:  100%
 Guest Payout:   0%
 ```
 
-The full 10 GEN deposit was therefore settled to the Host.
+The full deposit was therefore settled to the Host.
 
-### Resolution Transaction
+Resolution transaction:
 
 ```text
 0xd61025f007a753a7328d33b012eb9055f8ac6f497978ae43fe9a5eb0dce506b2
 ```
+
+### Case 3 — Guest Receives 100%
+
+House rules:
+
+```text
+Deposit fully refundable if check-out is on time (by 12 PM)
+and no furniture is broken.
+Standard cleaning fee is already included in the rent.
+```
+
+Both Host and Guest independently submitted evidence.
+
+The AI jury concluded that the refund conditions were satisfied. The Host confirmed that check-out was on time and the furniture was intact, while the remaining complaint fell under standard cleaning rather than a valid deposit claim.
+
+Final state:
+
+```text
+Status: RESOLVED
+
+Host evidence:  ✅
+Guest evidence: ✅
+
+Deposit: 10 GEN
+
+Host Payout:    0%
+Guest Payout: 100%
+```
+
+The full deposit was therefore returned to the Guest.
+
+Resolution transaction:
+
+```text
+0x2382fdf0c935c5479d58fa6e611aca7e4380072761fe7b34ad9ae1d670ad486e
+```
+
+These two cases demonstrate that the frontend does not fabricate or hardcode payout outcomes: different rules and evidence produced opposite settlement results through GenLayer consensus.
 
 ---
 
@@ -297,7 +342,7 @@ Waiting for finalization
 Confirmed on-chain state
 ```
 
-Read and finalization requests are routed through a Vercel RPC proxy with bounded backoff.
+Read and finalization requests are routed through a server-side RPC proxy with bounded backoff.
 
 The UI does not automatically resubmit a write transaction after an ambiguous RPC failure, reducing the risk of duplicate transactions.
 
@@ -329,9 +374,12 @@ nomad-court/
 ├── contracts/
 │   └── NomadCourt.py
 ├── scripts/
+│   ├── deploy.js
 │   └── test_flow.js
 ├── src/
-│   └── App.tsx
+│   ├── App.tsx
+│   ├── index.css
+│   └── main.tsx
 ├── package.json
 └── README.md
 ```
@@ -346,9 +394,9 @@ Install dependencies:
 npm install
 ```
 
-Set three independent test private keys.
+Set three independent StudioNet test private keys.
 
-Windows CMD:
+### Windows CMD
 
 ```cmd
 set HOST_KEY=0xYOUR_HOST_PRIVATE_KEY
@@ -357,7 +405,9 @@ set STRANGER_KEY=0xYOUR_STRANGER_PRIVATE_KEY
 npm test
 ```
 
-The suite is successful only when it ends with:
+The suite deploys a fresh `NomadCourt.py` contract for the test run.
+
+It is successful only when it ends with:
 
 ```text
 ✅ ALL TESTS PASSED
@@ -369,13 +419,30 @@ Any failed assertion terminates the process with a non-zero exit status.
 
 ---
 
+## Deploy a Fresh Contract
+
+The deployment script also reads its private key from an environment variable instead of embedding a signer in the repository.
+
+Windows CMD:
+
+```cmd
+set DEPLOYER_KEY=0xYOUR_TEST_PRIVATE_KEY
+npm run deploy
+```
+
+The deployed contract address is derived from the finalized deployment receipt.
+
+> Never use or commit a production wallet private key for testing.
+
+---
+
 ## Deployment
 
 ### Live dApp
 
 https://nomad-court-iota.vercel.app/
 
-### GitHub
+### GitHub Repository
 
 https://github.com/nikvn89/nomad-court
 
@@ -396,6 +463,7 @@ https://explorer-studio.genlayer.com/address/0x9C1eB73167FAfECeAd0FD046e0b54020D
 The current version specifically addresses the previous review:
 
 - ✅ Removed embedded frontend private keys
+- ✅ Removed hardcoded signer from deployment tooling
 - ✅ Real Host/Guest authorization through MetaMask
 - ✅ Evidence restricted to recorded parties
 - ✅ `create_dispute` is payable
@@ -409,6 +477,7 @@ The current version specifically addresses the previous review:
 - ✅ No rounding loss
 - ✅ Assertion failures terminate the test suite
 - ✅ Full MetaMask → evidence → AI consensus → native settlement flow demonstrated on StudioNet
+- ✅ Opposite settlement outcomes demonstrated with different rules and evidence
 
 ---
 
