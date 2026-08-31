@@ -130,42 +130,29 @@ async function waitForReceipt(hash, retries = 30) {
 }
 
 function executionName(receipt) {
-  return (
-    receipt?.txExecutionResultName ??
-    receipt?.tx_execution_result_name ??
-    receipt?.executionResultName ??
-    receipt?.execution_result_name ??
-    ''
-  );
+  /*
+   * Reviewer-facing invariant: use only the documented GenLayerJS field.
+   * FINALIZED consensus status is not enough; execution must also be checked.
+   */
+  return receipt?.txExecutionResultName ?? '';
 }
 
 function isExecutionSuccess(receipt) {
-  const name = executionName(receipt);
-
   return (
-    name === ExecutionResult.FINISHED_WITH_RETURN ||
-    name === 'FINISHED_WITH_RETURN' ||
-    name === 'SUCCESS'
+    executionName(receipt) ===
+    ExecutionResult.FINISHED_WITH_RETURN
   );
 }
 
 function isExecutionError(receipt) {
-  const name = executionName(receipt);
-
   return (
-    name === ExecutionResult.FINISHED_WITH_ERROR ||
-    name === 'FINISHED_WITH_ERROR' ||
-    name === 'ERROR'
+    executionName(receipt) ===
+    ExecutionResult.FINISHED_WITH_ERROR
   );
 }
 
 function statusName(tx) {
-  return String(
-    tx?.statusName ??
-      tx?.status_name ??
-      tx?.status ??
-      '',
-  ).toUpperCase();
+  return String(tx?.statusName ?? '').toUpperCase();
 }
 
 async function waitFinalized(
@@ -174,7 +161,8 @@ async function waitFinalized(
   retries = 45,
 ) {
   /*
-   * Keep old polling helper as an independent RPC check.
+   * Keep receipt existence polling as an independent transport check.
+   * It is NEVER treated as proof of execution success or revert.
    */
   await waitForReceipt(hash, retries);
 
@@ -213,197 +201,79 @@ async function readDispute(
 }
 
 function decodeHexUtf8(hex) {
-  if (
-    typeof hex !== 'string' ||
-    !hex.startsWith('0x')
-  ) {
-    return null;
+  assert(
+    typeof hex === 'string' && /^0x[0-9a-fA-F]*$/.test(hex),
+    'GenVM trace.return_data must be a hex string',
+  );
+
+  let body = hex.slice(2);
+
+  if (body.length % 2) {
+    body = `0${body}`;
+  }
+
+  return Buffer.from(body, 'hex')
+    .toString('utf8')
+    .replace(/\0/g, '')
+    .trim();
+}
+
+function decodeDisputeIdFromReturnData(returnData) {
+  /*
+   * The node documents debugTraceTransaction.return_data as the
+   * hex-encoded GenVM contract return.  Decode ONLY that field; do not
+   * recursively guess receipt/result/output aliases.
+   */
+  const decoded = decodeHexUtf8(returnData);
+
+  const direct = decoded.match(/^\s*"?(\d+)"?\s*$/);
+  if (direct) {
+    return direct[1];
   }
 
   try {
-    let body = hex.slice(2);
-
-    if (body.length % 2) {
-      body = `0${body}`;
-    }
-
-    const bytes = Buffer.from(body, 'hex');
-
-    const text = bytes
-      .toString('utf8')
-      .replace(/\0/g, '')
-      .trim();
-
-    return text || null;
-  } catch {
-    return null;
-  }
-}
-
-function findReturnedString(
-  value,
-  depth = 0,
-) {
-  if (depth > 6 || value == null) {
-    return null;
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-
-    /*
-     * Direct decoded return.
-     */
-    if (/^\d+$/.test(trimmed)) {
-      return trimmed;
-    }
-
-    /*
-     * JSON encoded string.
-     */
-    try {
-      const parsed = JSON.parse(trimmed);
-
-      if (
-        typeof parsed === 'string' &&
-        parsed.length > 0
-      ) {
-        return parsed;
-      }
-    } catch {
-      // Not JSON.
-    }
-
-    /*
-     * Hex encoded GenVM return data.
-     */
-    const decoded = decodeHexUtf8(trimmed);
-
-    if (decoded) {
-      const directDigits =
-        decoded.match(
-          /^\s*"?(\d+)"?\s*$/,
-        );
-
-      if (directDigits) {
-        return directDigits[1];
-      }
-
-      try {
-        const parsed = JSON.parse(decoded);
-
-        if (
-          typeof parsed === 'string' &&
-          parsed.length > 0
-        ) {
-          return parsed;
-        }
-      } catch {
-        // Continue.
-      }
-    }
-
-    return null;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found =
-        findReturnedString(
-          item,
-          depth + 1,
-        );
-
-      if (found) {
-        return found;
-      }
-    }
-
-    return null;
-  }
-
-  if (typeof value === 'object') {
-    const preferredKeys = [
-      'returnValue',
-      'return_value',
-      'returnData',
-      'return_data',
-      'output',
-      'result',
-      'txExecutionResult',
-      'tx_execution_result',
-      'executionResult',
-      'execution_result',
-    ];
-
-    for (const key of preferredKeys) {
-      if (key in value) {
-        const found =
-          findReturnedString(
-            value[key],
-            depth + 1,
-          );
-
-        if (found) {
-          return found;
-        }
-      }
-    }
-
-    for (
-      const child of Object.values(value)
+    const parsed = JSON.parse(decoded);
+    if (
+      typeof parsed === 'string' &&
+      /^\d+$/.test(parsed)
     ) {
-      const found =
-        findReturnedString(
-          child,
-          depth + 1,
-        );
-
-      if (found) {
-        return found;
-      }
+      return parsed;
     }
+  } catch {
+    // Assert below with the exact documented field value.
   }
 
-  return null;
+  assert(
+    false,
+    `Could not decode dispute ID from documented GenVM trace.return_data: ${returnData}`,
+  );
 }
 
-async function deriveDisputeId(
-  createHash,
-  createReceipt,
-) {
-  /*
-   * First inspect the confirmed full receipt.
-   */
-  let id =
-    findReturnedString(createReceipt);
+async function deriveDisputeId(createHash) {
+  let trace;
 
-  if (id) {
-    return id;
-  }
-
-  /*
-   * If receipt doesn't expose the decoded return,
-   * inspect GenVM return_data.
-   */
-  const trace =
-    await readClient.debugTraceTransaction({
+  try {
+    trace = await readClient.debugTraceTransaction({
       hash: createHash,
       round: 0,
     });
+  } catch (err) {
+    throw new Error(
+      `debugTraceTransaction RPC failure while reading create_dispute return: ${err?.message ?? err}`,
+    );
+  }
 
-  id = findReturnedString(
-    trace?.return_data ??
-      trace?.returnData ??
-      trace,
+  assert(
+    trace?.result_code === 0,
+    `create_dispute GenVM result_code must be 0, observed ${String(trace?.result_code)}`,
   );
 
   assert(
-    id,
-    'Could not decode create_dispute return value from receipt/trace',
+    typeof trace?.return_data === 'string',
+    'create_dispute trace is missing documented return_data',
   );
 
-  return id;
+  return decodeDisputeIdFromReturnData(trace.return_data);
 }
 
 async function getBalance(address) {
@@ -428,76 +298,61 @@ async function assertTransactionReverts(
 ) {
   let hash;
 
+  /*
+   * A wallet rejection, signing failure, or RPC submission error produces
+   * no transaction hash and therefore can NEVER satisfy a revert assertion.
+   */
   try {
     hash = await sendTx();
-  } catch {
-    console.log(
-      `✅ PASS: ${label} rejected before submission`,
+  } catch (err) {
+    assert(
+      false,
+      `${label}: transaction was not submitted (wallet/signing/RPC failure); this is NOT proof of a contract revert: ${err?.message ?? err}`,
     );
-
-    return;
   }
+
+  let receipt;
 
   try {
-    const receipt =
-      await waitFinalized(
-        client,
-        hash,
-        30,
-      );
-
-    if (isExecutionError(receipt)) {
-      console.log(
-        `✅ PASS: ${label} reverted`,
-      );
-
-      return;
-    }
-
-    assert(
-      false,
-      `${label} should have reverted, but execution succeeded`,
+    receipt = await waitFinalized(
+      client,
+      hash,
+      30,
     );
   } catch (err) {
-    /*
-     * Verify that the failure was really a chain-level
-     * failed/reverted execution.
-     */
-    try {
-      const tx =
-        await readClient.getTransaction({
-          hash,
-        });
-
-      const state =
-        statusName(tx);
-
-      const exec =
-        executionName(tx);
-
-      if (
-        isExecutionError(tx) ||
-        exec === 'FINISHED_WITH_ERROR' ||
-        state.includes('REVERT') ||
-        state.includes('ERROR')
-      ) {
-        console.log(
-          `✅ PASS: ${label} reverted`,
-        );
-
-        return;
-      }
-    } catch {
-      // Fall through.
-    }
-
     assert(
       false,
-      `${label}: receipt/wait failed without proof of revert: ${
-        err?.message ?? err
-      }`,
+      `${label}: receipt/RPC wait failed; this is NOT proof of a contract revert: ${err?.message ?? err}`,
     );
   }
+
+  assert(
+    isExecutionError(receipt),
+    `${label}: expected txExecutionResultName=${ExecutionResult.FINISHED_WITH_ERROR}, observed=${executionName(receipt)}`,
+  );
+
+  let trace;
+
+  try {
+    trace = await readClient.debugTraceTransaction({
+      hash,
+      round: 0,
+    });
+  } catch (err) {
+    assert(
+      false,
+      `${label}: debugTraceTransaction RPC failure; cannot prove contract revert: ${err?.message ?? err}`,
+    );
+  }
+
+  assert(
+    trace?.result_code === 1,
+    `${label}: expected documented GenVM result_code=1 (UserError), observed=${String(trace?.result_code)}`,
+  );
+
+  console.log(
+    `✅ PASS: ${label} produced a confirmed GenVM UserError revert`,
+  );
 }
 
 async function resolveWithUndeterminedRetry(
@@ -542,11 +397,8 @@ async function resolveWithUndeterminedRetry(
       }
 
       assert(
-        isExecutionSuccess(receipt) ||
-          executionName(receipt) === '',
-        `resolve_dispute did not finish successfully: ${executionName(
-          receipt,
-        )}`,
+        isExecutionSuccess(receipt),
+        `resolve_dispute did not finish with ${ExecutionResult.FINISHED_WITH_RETURN}: ${executionName(receipt)}`,
       );
 
       return receipt;
@@ -637,6 +489,11 @@ async function runTest() {
       45,
     );
 
+  assert(
+    isExecutionSuccess(deployReceipt),
+    `deploy did not finish with ${ExecutionResult.FINISHED_WITH_RETURN}: ${executionName(deployReceipt)}`,
+  );
+
   const contractAddress =
     deployReceipt?.contractAddress ??
     deployReceipt?.contract_address ??
@@ -685,14 +542,13 @@ async function runTest() {
     );
 
   assert(
-    !isExecutionError(createReceipt),
-    'create_dispute reverted',
+    isExecutionSuccess(createReceipt),
+    `create_dispute did not finish with ${ExecutionResult.FINISHED_WITH_RETURN}: ${executionName(createReceipt)}`,
   );
 
   const disputeId =
     await deriveDisputeId(
       createHash,
-      createReceipt,
     );
 
   assert(
@@ -857,10 +713,8 @@ async function runTest() {
     );
 
   assert(
-    !isExecutionError(
-      hostEvidenceReceipt,
-    ),
-    'host evidence transaction reverted',
+    isExecutionSuccess(hostEvidenceReceipt),
+    `host evidence did not finish with ${ExecutionResult.FINISHED_WITH_RETURN}: ${executionName(hostEvidenceReceipt)}`,
   );
 
   console.log(
@@ -886,10 +740,8 @@ async function runTest() {
     );
 
   assert(
-    !isExecutionError(
-      guestEvidenceReceipt,
-    ),
-    'guest evidence transaction reverted',
+    isExecutionSuccess(guestEvidenceReceipt),
+    `guest evidence did not finish with ${ExecutionResult.FINISHED_WITH_RETURN}: ${executionName(guestEvidenceReceipt)}`,
   );
 
   console.log(
