@@ -156,6 +156,30 @@ RESOLVED
 
 ---
 
+## Aug 31 Steward Runtime Proof
+
+The production business contract remains unchanged. A focused, executable StudioNet proof was added for the steward's native-payout request:
+
+```text
+tests/contracts/NativePayoutProbe.py
+scripts/test_native_payout.js
+STEWARD_RUNTIME_VERIFICATION.md
+```
+
+Run it with:
+
+```bash
+npm run test:payout
+```
+
+The probe uses the same `@gl.evm.contract_interface` + `emit_transfer(value=...)` native GEN primitive as NomadCourt and tests two cases: a successful two-recipient transfer, and a deliberate `UserError` raised **after both payout messages are emitted**. The rollback case requires `FINISHED_WITH_ERROR`, GenVM `result_code == 1`, zero triggered child transactions, unchanged Host/Guest balances, and the funded probe balance fully preserved.
+
+Wallet/signing/RPC submission errors are test failures, never accepted as proof of a contract revert. `create_dispute()` return decoding in the main integration suite now uses only the documented `debugTraceTransaction().return_data` field after requiring `result_code == 0`.
+
+See `STEWARD_RUNTIME_VERIFICATION.md` for the exact verification procedure and evidence-status caveat.
+
+---
+
 ## Assertion Test Suite
 
 NomadCourt includes a real asserting integration suite:

@@ -1,5 +1,30 @@
 # NomadCourt Testing Guide
 
+## Steward-focused native payout runtime test
+
+For the Aug 31 steward request, run the focused executable proof before the broader AI flow:
+
+```cmd
+npm run test:payout
+```
+
+It deploys only `tests/contracts/NativePayoutProbe.py` as a temporary test harness; it does **not** modify or redeploy the production `contracts/NomadCourt.py` source. The test proves both native GEN transfers on a successful parent transaction and then emits both transfers again followed by an intentional `gl.vm.UserError` to prove atomic rollback.
+
+A revert PASS requires both:
+
+```text
+txExecutionResultName == FINISHED_WITH_ERROR
+debugTraceTransaction.result_code == 1
+```
+
+A wallet rejection, signing failure, HTTP/RPC failure, or receipt timeout is a FAIL and cannot satisfy the revert assertion. The test also checks that the reverted parent produces zero triggered transactions, Host/Guest balances stay unchanged, and the probe retains the complete funded amount.
+
+The main `scripts/test_flow.js` was hardened the same way. It now decodes the `create_dispute()` ID only from the documented GenVM `debugTraceTransaction.return_data` field after requiring `result_code == 0`; it no longer recursively guesses receipt/result/output aliases.
+
+See `STEWARD_RUNTIME_VERIFICATION.md` for exact files and procedure. Do not claim a fresh runtime PASS until the command has actually completed on StudioNet and its transaction hashes/output are recorded.
+
+---
+
 This guide provides a reproducible way to verify the main security and settlement properties of NomadCourt on GenLayer StudioNet.
 
 NomadCourt includes:
