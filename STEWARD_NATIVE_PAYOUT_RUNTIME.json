@@ -1,0 +1,136 @@
+{
+  "schema": "nomadcourt-native-payout-runtime-v6",
+  "status": "PASS",
+  "network": "GenLayer StudioNet",
+  "generated_at_utc": "2026-09-04T08:09:48.609Z",
+  "source_sha256": {
+    "production_contract": "2ff3df46997146288ff918116b57e7ebf7a98777890978063807112b5aede2b5",
+    "payout_probe": "7c48f7fa600a166435d0c662bf553daacf2de2d6ac59f212ae296b672f10fcd9",
+    "runtime_test": "1d0ea8f2468fb559e41bbea4dfa63ed0f2a7416eb85b56ceae2020774b893693"
+  },
+  "transactions": {
+    "probe_deploy": "0x7207530683e65f6e721a2734348b7e7bfe796da2b3d21d41b3f9aeae542bdbbc",
+    "probe_deploy_execution": {
+      "source": "documented-execution-enum-unavailable-on-studionet",
+      "expectedTxExecutionResultName": "FINISHED_WITH_RETURN",
+      "txExecutionResultName": null,
+      "txExecutionResult": null,
+      "optionalGetTransactionRpcError": null,
+      "note": "StudioNet/SDK did not publish txExecutionResult*. No execution outcome is inferred from that absence."
+    },
+    "success_funding": "0xc0cc60f1b6580279b525c653f4275b90a6a2774df642d3242177fdef1d20cae4",
+    "success_probe_funding_execution": {
+      "source": "documented-execution-enum-unavailable-on-studionet",
+      "expectedTxExecutionResultName": "FINISHED_WITH_RETURN",
+      "txExecutionResultName": null,
+      "txExecutionResult": null,
+      "optionalGetTransactionRpcError": null,
+      "note": "StudioNet/SDK did not publish txExecutionResult*. No execution outcome is inferred from that absence."
+    },
+    "success_payout": "0x4149a187ba447aebf4211b9fad2d78663af33a6b61f46af7f433a62942b01e07",
+    "payout_both_execution": {
+      "source": "documented-execution-enum-unavailable-on-studionet",
+      "expectedTxExecutionResultName": "FINISHED_WITH_RETURN",
+      "txExecutionResultName": null,
+      "txExecutionResult": null,
+      "optionalGetTransactionRpcError": null,
+      "note": "StudioNet/SDK did not publish txExecutionResult*. No execution outcome is inferred from that absence."
+    },
+    "payout_both_messages": {
+      "emitted_message_count": 2,
+      "note": "Only the documented/observed top-level message count is asserted; member internals are not decoded."
+    },
+    "rollback_funding": "0x81afb05fd9696f54f13140339e77eea80d100980fccd7c25dd0a54fe4a0a8781",
+    "rollback_probe_funding_execution": {
+      "source": "documented-execution-enum-unavailable-on-studionet",
+      "expectedTxExecutionResultName": "FINISHED_WITH_RETURN",
+      "txExecutionResultName": null,
+      "txExecutionResult": null,
+      "optionalGetTransactionRpcError": null,
+      "note": "StudioNet/SDK did not publish txExecutionResult*. No execution outcome is inferred from that absence."
+    },
+    "rollback_parent": "0x36fccb6f6245b90cdc0bc953a61c5a7879433a384f319bf450ddb5324c2ccd3f",
+    "payout_both_then_revert_execution": {
+      "source": "documented-execution-enum-unavailable-on-studionet",
+      "expectedTxExecutionResultName": "FINISHED_WITH_ERROR",
+      "txExecutionResultName": null,
+      "txExecutionResult": null,
+      "optionalGetTransactionRpcError": null,
+      "note": "StudioNet/SDK did not publish txExecutionResult*. No execution outcome is inferred from that absence."
+    },
+    "payout_both_then_revert_messages": {
+      "emitted_message_count": 2,
+      "note": "Only the documented/observed top-level message count is asserted; member internals are not decoded."
+    },
+    "rollback_cleanup": "0x970d8c6b74320bd8ccd45e9052100083eacdb0a422850b07a8f3b8a87c891bb8",
+    "rollback_cleanup_payout_execution": {
+      "source": "documented-execution-enum-unavailable-on-studionet",
+      "expectedTxExecutionResultName": "FINISHED_WITH_RETURN",
+      "txExecutionResultName": null,
+      "txExecutionResult": null,
+      "optionalGetTransactionRpcError": null,
+      "note": "StudioNet/SDK did not publish txExecutionResult*. No execution outcome is inferred from that absence."
+    },
+    "rollback_cleanup_payout_messages": {
+      "emitted_message_count": 2,
+      "note": "Only the documented/observed top-level message count is asserted; member internals are not decoded."
+    }
+  },
+  "assertions": {
+    "production_primitive_runtime_verified": true,
+    "both_native_transfers_committed": true,
+    "success_parent_emitted_two_messages": true,
+    "success_parent_created_two_triggered_transactions": true,
+    "rollback_parent_finalized": true,
+    "rollback_parent_reached_both_emissions": true,
+    "rollback_triggered_transaction_count_zero": true,
+    "rollback_recipient_balances_unchanged": true,
+    "rollback_probe_balance_retained": true,
+    "atomic_rollback_proven_by_controlled_pair": true,
+    "wallet_or_rpc_failure_not_accepted_as_contract_revert": true,
+    "tx_execution_enum_treated_as_optional_corroboration_only": true,
+    "no_undocumented_execution_receipt_fallback_used": true
+  },
+  "scope_note": "StudioNet/genlayer-js@1.1.8 does not publish txExecutionResult* on the observed Studio path. Atomic rollback is proven by a controlled runtime pair: the rollback parent reaches both native-message emissions, finalizes, creates zero triggered child transactions, moves zero recipient value, and retains the full probe balance. The static gate proves the only rollback probe path raises UserError after those two emissions. The report does not infer an exception enum from missing fields.",
+  "probe_address": "0x7b827E31f6CC3291b39152B711D39350F164a279",
+  "success_case": {
+    "emitted_message_count": 2,
+    "triggered_transaction_count": 2,
+    "triggered_transaction_ids": [
+      "0xe0a386d7ca1884d0e0443408159b276b56f584d3b3b952d13c04ab2ce0cbb55a",
+      "0x88cab687172d80e958066654fe0344fd62a90a3ebf08a2e2d7e10dae5730250f"
+    ],
+    "host_before_wei": "25012000000000005000",
+    "guest_before_wei": "9776102000000000000000",
+    "host_after_wei": "25013000000000005000",
+    "guest_after_wei": "9776103000000000000000",
+    "host_gain_wei": "1000000000000000",
+    "guest_gain_wei": "1000000000000000",
+    "probe_after_wei": "0"
+  },
+  "atomic_rollback_proof": {
+    "parent_transaction_finalized": true,
+    "parent_emitted_message_count": 2,
+    "committed_triggered_transaction_count": 0,
+    "host_delta_wei": "0",
+    "guest_delta_wei": "0",
+    "probe_delta_wei": "0",
+    "probe_balance_retained_wei": "2000000000000000",
+    "structural_precondition": "static steward check asserts payout_both_then_revert calls _emit_split(host, guest), which emits both NativePayout transfers, and then immediately raises gl.vm.UserError on its only path",
+    "proof_statement": "The finalized parent reached both payout emissions (messages.length == 2), but committed zero triggered children and moved zero recipient value while retaining the full funded probe balance. Together with the source-locked single rollback path, this demonstrates atomic discard of both emitted native transfers."
+  },
+  "rollback_case": {
+    "expected_optional_execution_enum": "FINISHED_WITH_ERROR",
+    "observed_optional_execution_enum": null,
+    "execution_enum_source": "documented-execution-enum-unavailable-on-studionet",
+    "emitted_message_count": 2,
+    "triggered_transaction_count": 0,
+    "host_before_wei": "25013000000000005000",
+    "host_after_wei": "25013000000000005000",
+    "guest_before_wei": "9776103000000000000000",
+    "guest_after_wei": "9776103000000000000000",
+    "probe_before_wei": "2000000000000000",
+    "probe_after_wei": "2000000000000000"
+  },
+  "completed_at_utc": "2026-09-04T08:13:52.888Z"
+}

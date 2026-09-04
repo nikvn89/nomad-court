@@ -1,27 +1,55 @@
 # NomadCourt Testing Guide
 
-## Steward-focused native payout runtime test
+## Steward-focused native payout runtime test — v6
 
-For the Aug 31 steward request, run the focused executable proof before the broader AI flow:
+Run:
 
 ```cmd
-npm run test:payout
+npm run test:steward
 ```
 
-It deploys only `tests/contracts/NativePayoutProbe.py` as a temporary test harness; it does **not** modify or redeploy the production `contracts/NomadCourt.py` source. The test proves both native GEN transfers on a successful parent transaction and then emits both transfers again followed by an intentional `gl.vm.UserError` to prove atomic rollback.
+The command first runs `npm run test:payout:static`, which locks the test probe to the exact production `NativePayout` interface, confirms two production `emit_transfer()` calls and exact remainder conservation, proves the rollback probe raises only after `_emit_split()`, and verifies that `create_dispute()` return decoding uses only documented GenVM `trace.return_data`.
 
-A revert PASS requires both:
+The live test in `scripts/test_native_payout.js` then executes a controlled pair on the same test-only probe.
+
+### Successful payout parent
+
+Required assertions:
+
+- finalized parent transaction;
+- `messages.length == 2`;
+- `getTriggeredTransactionIds(parent).length == 2`;
+- exact Host balance gain;
+- exact Guest balance gain;
+- probe balance becomes zero.
+
+### Deliberate rollback parent
+
+The source-locked function emits both native-transfer messages and then raises `gl.vm.UserError`. Runtime must show:
+
+- finalized parent transaction;
+- `messages.length == 2` — execution reached both emissions;
+- `getTriggeredTransactionIds(parent).length == 0` — neither child committed;
+- Host balance unchanged;
+- Guest balance unchanged;
+- probe retains the full funded amount.
+
+This controlled pair is the atomic-rollback proof. The hosted StudioNet path observed in v5 does not publish `txExecutionResult*` and does not expose the debug-trace RPC, so v6 does not guess raw receipt internals or infer a revert from missing fields. If the documented execution enum appears on another compatible path, it is checked only as optional corroboration.
+
+Wallet rejection, signing failure, HTTP/RPC failure, receipt failure, or triggered-transaction read failure is always a test FAIL and is never classified as a contract revert.
+
+At startup, the runtime harness deletes any stale `STEWARD_NATIVE_PAYOUT_RUNTIME.json`. A successful run writes a fresh reviewer-safe artifact with no private keys.
+
+Do not claim a fresh runtime PASS until the console ends with:
 
 ```text
-txExecutionResultName == FINISHED_WITH_ERROR
-debugTraceTransaction.result_code == 1
+✅ STEWARD NATIVE PAYOUT STATIC CHECK PASSED
+✅ NATIVE PAYOUT + ATOMIC ROLLBACK TEST PASSED
 ```
 
-A wallet rejection, signing failure, HTTP/RPC failure, or receipt timeout is a FAIL and cannot satisfy the revert assertion. The test also checks that the reverted parent produces zero triggered transactions, Host/Guest balances stay unchanged, and the probe retains the complete funded amount.
+and the generated `STEWARD_NATIVE_PAYOUT_RUNTIME.json` is retained.
 
-The main `scripts/test_flow.js` was hardened the same way. It now decodes the `create_dispute()` ID only from the documented GenVM `debugTraceTransaction.return_data` field after requiring `result_code == 0`; it no longer recursively guesses receipt/result/output aliases.
-
-See `STEWARD_RUNTIME_VERIFICATION.md` for exact files and procedure. Do not claim a fresh runtime PASS until the command has actually completed on StudioNet and its transaction hashes/output are recorded.
+See `STEWARD_RUNTIME_VERIFICATION.md` for the shortest reviewer procedure.
 
 ---
 
@@ -605,3 +633,54 @@ Host evidence: ✅
 Guest evidence: ✅
 Host Payout + Guest Payout = 100%
 ```
+
+> StudioNet compatibility note (runtime-proof v6): v5 observed two parent messages on both success and rollback. Success committed two triggered children and exact recipient gains; rollback committed zero triggered children and moved zero value while retaining the probe balance. `txExecutionResult*` was absent and the hosted debug RPC unavailable, so v6 does not rely on either.
+
+---
+
+## V5 diagnostic-first StudioNet runtime capture
+
+Use this only when `npm run test:steward` is blocked because the StudioNet endpoint
+omits `txExecutionResult*` and does not expose the debug trace RPC. This command is
+**diagnostic only** and does not claim steward PASS:
+
+```bash
+npm run diagnose:steward
+```
+
+Required local environment variables:
+
+```text
+STRANGER_KEY
+HOST_KEY
+GUEST_KEY
+```
+
+All three must be fresh test-wallet private keys in `0x` + 64-hex format. The
+script never prints private keys.
+
+The diagnostic intentionally:
+
+1. deploys the test-only `NativePayoutProbe`;
+2. records the actual StudioNet shape returned by
+   `waitForTransactionReceipt(... fullTransaction:false)`,
+   `waitForTransactionReceipt(... fullTransaction:true)`, and `getTransaction()`;
+3. performs one successful two-recipient native payout and records exact balance
+   deltas;
+4. re-funds the probe and calls the documented
+   `simulateWriteContract(... includeReceipt:true)` surface for both the success
+   and deliberate-error paths, recording only safe shape/receipt-field metadata;
+5. submits the actual deliberate rollback transaction and records its transaction
+   views, triggered transaction IDs, and before/after balances;
+6. attempts a cleanup payout so test funds are not intentionally stranded.
+
+The output is:
+
+```text
+STEWARD_RUNTIME_DIAGNOSTIC.json
+```
+
+`STEWARD_RUNTIME_DIAGNOSTIC.json` is **not** the final steward proof artifact.
+Upload it for review. The final proof patch must be based on the documented fields
+that the runtime actually exposes; missing fields are never guessed and an RPC,
+wallet, signing, or transport failure is never classified as a contract revert.

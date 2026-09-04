@@ -10,10 +10,14 @@
     "preview": "vite preview",
     "deploy": "node scripts/deploy.js",
     "test": "node scripts/test_flow.js",
-    "test:payout": "node scripts/test_native_payout.js"
+    "test:payout": "node scripts/test_native_payout.js",
+    "test:payout:static": "node scripts/check_steward_native_payout.js",
+    "test:steward": "node scripts/check_steward_native_payout.js && node scripts/test_native_payout.js",
+    "diagnose:tx": "node scripts/diagnose_tx_shape.js",
+    "diagnose:steward": "node scripts/diagnose_steward_runtime.js"
   },
   "dependencies": {
-    "genlayer-js": "^1.0.0",
+    "genlayer-js": "1.1.8",
     "lucide-react": "^0.424.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
