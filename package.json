@@ -12,9 +12,7 @@
     "test": "node scripts/test_flow.js",
     "test:payout": "node scripts/test_native_payout.js",
     "test:payout:static": "node scripts/check_steward_native_payout.js",
-    "test:steward": "node scripts/check_steward_native_payout.js && node scripts/test_native_payout.js",
-    "diagnose:tx": "node scripts/diagnose_tx_shape.js",
-    "diagnose:steward": "node scripts/diagnose_steward_runtime.js"
+    "test:steward": "node scripts/check_steward_native_payout.js && node scripts/test_native_payout.js"
   },
   "dependencies": {
     "genlayer-js": "1.1.8",

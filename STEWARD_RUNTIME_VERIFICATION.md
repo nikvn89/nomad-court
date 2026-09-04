@@ -125,7 +125,3 @@ Expected final banner:
 ```
 
 A fresh StudioNet PASS was completed on 2026-09-04 and the resulting `STEWARD_NATIVE_PAYOUT_RUNTIME.json` is bundled in this resubmission package.
-
-## Diagnostic instrument
-
-`npm run diagnose:steward` remains in the repository as a diagnostic instrument. It is not a PASS artifact. Use it only when a future StudioNet/SDK response shape changes.
