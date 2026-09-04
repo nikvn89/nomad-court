@@ -518,23 +518,8 @@ The current version specifically addresses the previous review:
 
 ## Status
 
-**Core NomadCourt flows have been tested on GenLayer StudioNet. The v6 steward-specific native payout + atomic rollback proof is source/static-checked and still requires one fresh `npm run test:steward` PASS plus the generated runtime JSON before resubmission.**
+**Core NomadCourt flows have been tested on GenLayer StudioNet. The v6 steward-specific native payout + atomic rollback proof has completed a fresh `npm run test:steward` PASS, and the resulting `STEWARD_NATIVE_PAYOUT_RUNTIME.json` is included in this repository for resubmission. The production contract remains unchanged.**
 
 NomadCourt demonstrates how GenLayer can combine subjective AI consensus with deterministic contract guarantees to turn real-world disputes into enforceable, atomic on-chain settlements.
 
 > StudioNet compatibility note (runtime-proof v6): the v5 diagnostic observed `messages.length == 2` for both the successful payout parent and the deliberate rollback parent. The successful parent produced two triggered children and exact Host/Guest balance gains; the rollback parent produced zero triggered children and zero balance movement while retaining the full funded probe balance. StudioNet omitted `txExecutionResult*`, so v6 does not infer an exception enum from missing fields.
-
-### Steward runtime diagnostic (v5)
-
-If StudioNet does not expose the execution evidence expected by the current
-`test:steward` runner, do not keep retrying it. With three fresh test-wallet keys
-set locally, run:
-
-```bash
-npm run diagnose:steward
-```
-
-Then upload `STEWARD_RUNTIME_DIAGNOSTIC.json` for review. This diagnostic sends
-only test-probe transactions, never changes or redeploys the production
-NomadCourt contract, never prints private keys, and never treats wallet/signing/
-RPC failures as contract reverts.
