@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "deploy": "node scripts/deploy.js",
     "test": "node scripts/test_flow.js",
+    "test:id-source": "node scripts/check_dispute_id_source.js",
     "test:payout": "node scripts/test_native_payout.js",
     "test:payout:static": "node scripts/check_steward_native_payout.js",
     "test:steward": "node scripts/check_steward_native_payout.js && node scripts/test_native_payout.js"

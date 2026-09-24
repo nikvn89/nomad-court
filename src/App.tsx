@@ -38,77 +38,47 @@ function executionFailed(receipt: any) {
   );
 }
 
-function decodeHexUtf8(hex: string) {
-  if (!hex?.startsWith('0x')) return '';
-  try {
-    const body = hex.slice(2);
-    const bytes = new Uint8Array(
-      body.match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) ?? [],
+function decodeHexUtf8(hex: string): string {
+  if (typeof hex !== 'string' || !/^0x[0-9a-fA-F]*$/.test(hex)) {
+    throw new Error(
+      `GenVM trace.return_data must be a hex string, received: ${String(hex)}`,
     );
-    return new TextDecoder().decode(bytes).replace(/\0/g, '').trim();
-  } catch {
-    return '';
   }
+
+  let body = hex.slice(2);
+  if (body.length % 2) body = `0${body}`;
+
+  const bytes = new Uint8Array(
+    body.match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) ?? [],
+  );
+
+  return new TextDecoder().decode(bytes).replace(/\0/g, '').trim();
 }
 
-function findReturnedString(value: any, depth = 0): string | null {
-  if (depth > 6 || value == null) return null;
+function decodeDisputeIdFromReturnData(returnData: string): string {
+  /*
+   * The node documents debugTraceTransaction.return_data as the hex-encoded
+   * GenVM contract return. Decode ONLY that field.
+   *
+   * Never fall back to scanning the receipt or the transaction: both contain
+   * unrelated numeric fields, and a recursive search can silently return one
+   * of those values as the dispute ID.
+   */
+  const decoded = decodeHexUtf8(returnData);
 
-  if (typeof value === 'string') {
-    const text = value.trim();
-    if (/^\d+$/.test(text)) return text;
+  const direct = decoded.match(/^\s*"?(\d+)"?\s*$/);
+  if (direct) return direct[1];
 
-    try {
-      const parsed = JSON.parse(text);
-      if (typeof parsed === 'string' && parsed) return parsed;
-    } catch {}
-
-    const decoded = decodeHexUtf8(text);
-    const match = decoded.match(/^\s*"?(\d+)"?\s*$/);
-    if (match) return match[1];
-
-    try {
-      const parsed = JSON.parse(decoded);
-      if (typeof parsed === 'string' && parsed) return parsed;
-    } catch {}
-
-    return null;
+  try {
+    const parsed = JSON.parse(decoded);
+    if (typeof parsed === 'string' && /^\d+$/.test(parsed)) return parsed;
+  } catch {
+    // Fall through to the hard error below.
   }
 
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findReturnedString(item, depth + 1);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  if (typeof value === 'object') {
-    for (const key of [
-      'returnValue',
-      'return_value',
-      'returnData',
-      'return_data',
-      'output',
-      'result',
-      'txExecutionResult',
-      'tx_execution_result',
-      'executionResult',
-      'execution_result',
-    ]) {
-      if (key in value) {
-        const found = findReturnedString(value[key], depth + 1);
-        if (found) return found;
-      }
-    }
-
-    for (const child of Object.values(value)) {
-      const found = findReturnedString(child, depth + 1);
-      if (found) return found;
-    }
-  }
-
-  return null;
+  throw new Error(
+    `Could not decode dispute ID from documented GenVM trace.return_data: ${returnData}`,
+  );
 }
 
 function App() {
@@ -291,31 +261,28 @@ function App() {
     );
   };
 
-  const deriveDisputeId = async (
-    hash: `0x${string}`,
-    receipt: any,
-  ) => {
-    // Preserve the working path that successfully returned Case ID 4:
-    // decode the confirmed full receipt first.
-    let returnedId = findReturnedString(receipt);
-    if (returnedId) return returnedId;
+  const deriveDisputeId = async (hash: `0x${string}`): Promise<string> => {
+    let trace: any;
 
-    // Safe fallback: inspect the confirmed transaction object.
-    // Never probe get_dispute(1..10) and never guess a latest ID.
     try {
-      const tx = await readClient.getTransaction({ hash });
-      returnedId = findReturnedString(tx);
-
-      if (returnedId) {
-        return returnedId;
-      }
-    } catch {
-      // Fall through to a hard error.
+      trace = await (readClient as any).debugTraceTransaction({ hash, round: 0 });
+    } catch (err: any) {
+      throw new Error(
+        `debugTraceTransaction RPC failure while reading create_dispute return: ${err?.message ?? err}`,
+      );
     }
 
-    throw new Error(
-      'create_dispute finalized but its returned dispute ID could not be decoded',
-    );
+    if (trace?.result_code !== 0) {
+      throw new Error(
+        `create_dispute GenVM result_code must be 0, observed ${String(trace?.result_code)}`,
+      );
+    }
+
+    if (typeof trace?.return_data !== 'string') {
+      throw new Error('create_dispute trace is missing documented return_data');
+    }
+
+    return decodeDisputeIdFromReturnData(trace.return_data);
   };
 
   const ensureRoleClient = async (role: Role) => {
@@ -370,12 +337,10 @@ function App() {
 
       setSubmittedHash(hash);
       setStatusMsg(`📨 Submitted ${hash}. Waiting for FINALIZED...`);
-      const receipt = await waitFinalized(hash as `0x${string}`);
+      // Finalization remains mandatory, but the receipt is not an ID source.
+      await waitFinalized(hash as `0x${string}`);
 
-      const returnedId = await deriveDisputeId(
-        hash as `0x${string}`,
-        receipt,
-      );
+      const returnedId = await deriveDisputeId(hash as `0x${string}`);
 
       setDisputeId(returnedId);
       await fetchDispute(returnedId);

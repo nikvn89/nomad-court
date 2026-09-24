@@ -8,6 +8,8 @@ const SAFE_RETRY_METHODS = new Set([
   'eth_call',
   'eth_chainId',
   'net_version',
+  // genlayer-js@1.1.8 maps debugTraceTransaction() to this read-only RPC.
+  'gen_dbg_traceTransaction',
 ]);
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

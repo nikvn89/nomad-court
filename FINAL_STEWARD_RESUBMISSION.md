@@ -64,6 +64,22 @@ If a compatible path publishes the documented execution enum, the runtime harnes
 
 Wallet/signing/RPC submission failures, receipt/RPC failures, and triggered-transaction read failures are explicit test failures and are never accepted as proof of a contract revert.
 
+## What the previous resubmission got wrong
+
+The previous submission claimed this requirement as PASS on the strength of
+`scripts/test_flow.js` alone. `src/App.tsx` still derived the id by recursively
+scanning the finalized receipt and, failing that, the transaction, returning the
+first string of digits it reached. The steward was right to reject it. That path
+is now deleted and the app reads the same single documented field as the test.
+
+The frontend still waits for `FINALIZED`, then calls
+`debugTraceTransaction({ hash, round: 0 })`, requires `result_code === 0`, and
+decodes only `return_data`. Missing, malformed, or unsuccessful trace data is a
+hard error. At the transport layer, `genlayer-js@1.1.8` maps this call to the
+read-only `gen_dbg_traceTransaction` method; the RPC proxy retries that exact
+method on rate limiting. `npm run test:id-source` checks these invariants and
+executes the decoder's positive and negative cases directly from `src/App.tsx`.
+
 ## Steward requirement matrix
 
 | Requirement | Result | Evidence |
@@ -71,13 +87,14 @@ Wallet/signing/RPC submission failures, receipt/RPC failures, and triggered-tran
 | Native payout primitive runtime-verifiable in repo | PASS | Source-locked probe uses exact production `NativePayout` interface; live deploy/fund/payout succeeds |
 | Executable test proves both native transfers | PASS | 2 emitted messages, 2 triggered children, exact Host/Guest balance gains, probe drained |
 | Executable test proves atomic rollback | PASS | Same funded probe: 2 emissions, 0 committed children, zero recipient movement, full probe balance retained, source-locked raise-after-emission path |
-| Only documented/defensible return or execution evidence decoded | PASS | No raw execution receipt fallback; `create_dispute` return decoding remains restricted to documented GenVM trace return data |
+| Only documented/defensible return or execution evidence decoded | PASS | Both the app and the test decode `create_dispute`'s id from exactly one source: `debugTraceTransaction.return_data`. `src/App.tsx` no longer reads the receipt or transaction for it—the recursive `findReturnedString` scan is deleted. Failure to read or decode that field is a hard error with no fallback. Test: `scripts/test_flow.js::decodeDisputeIdFromReturnData`. App: `src/App.tsx::decodeDisputeIdFromReturnData`. |
 | Contract-level rollback separated from wallet/signing/RPC failures | PASS | Pre-chain/RPC failures are hard FAILs and cannot satisfy finalized rollback-state assertions |
 
 ## Reviewer commands
 
 ```bash
 npm install --no-audit --no-fund
+npm run test:id-source
 npm run test:payout:static
 ```
 
