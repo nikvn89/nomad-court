@@ -179,7 +179,12 @@ The v5 runtime diagnostic established that the hosted StudioNet path with `genla
 
 Wallet rejection, signing failure, HTTP/RPC failure, receipt failure, or `getTriggeredTransactionIds()` read failure is a **test failure**, never a rollback PASS. The rollback proof is instead the controlled runtime pair: the finalized parent visibly reaches both message emissions, but commits zero child transactions and moves zero value; the static gate proves that the only test-probe path then raises after those emissions.
 
-The main integration suite still decodes `create_dispute()` return data only from documented GenVM `debugTraceTransaction().return_data`; it does not recursively guess receipt/result/output aliases.
+The main integration suite decodes `create_dispute()` only from the accepted
+leader's exact SDK field,
+`consensus_data.leader_receipt[0].result.payload.readable`, after finalization.
+This is the same result path the official GenLayer Explorer uses to display
+`Return Value`. It never recursively scans receipt or transaction fields and
+does not depend on the unavailable hosted StudioNet debug RPC.
 
 A successful live run writes:
 

@@ -8,7 +8,7 @@ Run:
 npm run test:steward
 ```
 
-The command first runs `npm run test:payout:static`, which locks the test probe to the exact production `NativePayout` interface, confirms two production `emit_transfer()` calls and exact remainder conservation, proves the rollback probe raises only after `_emit_split()`, and verifies that `create_dispute()` return decoding uses only documented GenVM `trace.return_data`.
+The command first runs `npm run test:payout:static`, which locks the test probe to the exact production `NativePayout` interface, confirms two production `emit_transfer()` calls and exact remainder conservation, proves the rollback probe raises only after `_emit_split()`, and verifies that `create_dispute()` return decoding uses only the accepted leader's exact SDK result field: `consensus_data.leader_receipt[0].result.payload.readable`.
 
 The live test in `scripts/test_native_payout.js` then executes a controlled pair on the same test-only probe.
 
@@ -637,3 +637,60 @@ Host Payout + Guest Payout = 100%
 > StudioNet compatibility note (runtime-proof v6): v5 observed two parent messages on both success and rollback. Success committed two triggered children and exact recipient gains; rollback committed zero triggered children and moved zero value while retaining the probe balance. `txExecutionResult*` was absent and the hosted debug RPC unavailable, so v6 does not rely on either.
 
 ---
+
+# 10. Requested Exact-ID Fix — Fresh StudioNet Case 5
+
+The requested dispute-ID correction was verified against a real finalized
+`create_dispute` transaction:
+
+```text
+Create transaction:
+0xc12e44054dab716282b68c6d78a8c14b98a8a7e12038922775af7c1af5625a58
+
+Explorer Return Value: "5"
+Decoded Case ID:       5
+```
+
+The production decoder now reads only:
+
+```text
+consensus_data.leader_receipt[0].result.payload.readable
+```
+
+after requiring:
+
+```text
+result.status == "return"
+```
+
+It does not recursively scan the receipt, fetch and scan the transaction, guess
+a latest ID, or depend on the unavailable hosted StudioNet debug RPC.
+
+The same Case ID was then completed with both assigned wallets:
+
+```text
+Host:  0x146e44881d35814ba582d265af5b97ef2695ec8e
+Guest: 0x6276095faea15108740445ff277fda8c304657f4
+
+Status:         RESOLVED
+Host evidence:  present
+Guest evidence: present
+Host payout:    0%
+Guest payout:   100%
+```
+
+Resolution transaction:
+
+```text
+0x2d750478d5ae1382ed388f29aa9ace6108d82a3b0293d782b86df2a29a2320e2
+```
+
+Browser evidence:
+
+```text
+evidence/case-5-resolved.png
+SHA-256: ae25b1a7d5b71a347caa71558c343dae98cbeb6295da42156e996233f151f077
+```
+
+This lifecycle evidence supplements the source-locked decoder test. It does not
+replace the exact-field assertions in `npm run test:id-source`.

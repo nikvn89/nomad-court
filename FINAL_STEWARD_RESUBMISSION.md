@@ -70,15 +70,49 @@ The previous submission claimed this requirement as PASS on the strength of
 `scripts/test_flow.js` alone. `src/App.tsx` still derived the id by recursively
 scanning the finalized receipt and, failing that, the transaction, returning the
 first string of digits it reached. The steward was right to reject it. That path
-is now deleted and the app reads the same single documented field as the test.
+is deleted.
 
-The frontend still waits for `FINALIZED`, then calls
-`debugTraceTransaction({ hash, round: 0 })`, requires `result_code === 0`, and
-decodes only `return_data`. Missing, malformed, or unsuccessful trace data is a
-hard error. At the transport layer, `genlayer-js@1.1.8` maps this call to the
-read-only `gen_dbg_traceTransaction` method; the RPC proxy retries that exact
-method on rate limiting. `npm run test:id-source` checks these invariants and
-executes the decoder's positive and negative cases directly from `src/App.tsx`.
+An intermediate fix attempted `gen_dbg_traceTransaction`, but the hosted
+StudioNet endpoint does not expose that debug method. The production fix now
+waits for `FINALIZED` and decodes exactly
+`consensus_data.leader_receipt[0].result.payload.readable`. This is the same
+accepted-leader result that the official GenLayer Explorer decodes for its
+`Return Value` display. The decoder requires `result.status === "return"`, then
+requires a canonical positive decimal string; missing or malformed data is a
+hard error. There is no recursive search, alias probing, guessed latest id, or
+debug-RPC dependency. `npm run test:id-source` locks these invariants and runs
+positive and negative cases directly from `src/App.tsx`.
+
+Live StudioNet verification:
+
+- Transaction: `0xc12e44054dab716282b68c6d78a8c14b98a8a7e12038922775af7c1af5625a58`
+- Status: `FINALIZED`, GenVM execution: `SUCCESS`
+- Exact Explorer Return Value: `"5"`
+- Explorer URL: `https://explorer-studio.genlayer.com/tx/0xc12e44054dab716282b68c6d78a8c14b98a8a7e12038922775af7c1af5625a58`
+
+### Completed lifecycle for returned Case ID 5
+
+The same returned Case ID was completed through the production interface on
+StudioNet with two distinct wallets:
+
+- Host: `0x146e44881d35814ba582d265af5b97ef2695ec8e`
+- Guest: `0x6276095faea15108740445ff277fda8c304657f4`
+- Host evidence: present
+- Guest evidence: present
+- Final status: `RESOLVED`
+- Host payout: `0%`
+- Guest payout: `100%`
+- Resolution transaction: `0x2d750478d5ae1382ed388f29aa9ace6108d82a3b0293d782b86df2a29a2320e2`
+- Explorer URL: `https://explorer-studio.genlayer.com/tx/0x2d750478d5ae1382ed388f29aa9ace6108d82a3b0293d782b86df2a29a2320e2`
+
+The screenshot below records the resolved contract state, both evidence flags,
+the returned Case ID, the payout split, and the AI jury rationale.
+
+![Resolved StudioNet Case 5](evidence/case-5-resolved.png)
+
+Screenshot SHA-256:
+
+`ae25b1a7d5b71a347caa71558c343dae98cbeb6295da42156e996233f151f077`
 
 ## Steward requirement matrix
 
@@ -87,7 +121,7 @@ executes the decoder's positive and negative cases directly from `src/App.tsx`.
 | Native payout primitive runtime-verifiable in repo | PASS | Source-locked probe uses exact production `NativePayout` interface; live deploy/fund/payout succeeds |
 | Executable test proves both native transfers | PASS | 2 emitted messages, 2 triggered children, exact Host/Guest balance gains, probe drained |
 | Executable test proves atomic rollback | PASS | Same funded probe: 2 emissions, 0 committed children, zero recipient movement, full probe balance retained, source-locked raise-after-emission path |
-| Only documented/defensible return or execution evidence decoded | PASS | Both the app and the test decode `create_dispute`'s id from exactly one source: `debugTraceTransaction.return_data`. `src/App.tsx` no longer reads the receipt or transaction for it—the recursive `findReturnedString` scan is deleted. Failure to read or decode that field is a hard error with no fallback. Test: `scripts/test_flow.js::decodeDisputeIdFromReturnData`. App: `src/App.tsx::decodeDisputeIdFromReturnData`. |
+| Only documented/defensible return or execution evidence decoded | PASS | Both app and test decode exactly `consensus_data.leader_receipt[0].result.payload.readable`, after requiring `status === "return"`. This is the same accepted-leader field used by the official Explorer. Recursive `findReturnedString`, transaction rescans, alias probing, guessed IDs, and debug-RPC dependence are absent. Test: `scripts/test_flow.js::decodeDisputeIdFromLeaderReceipt`. App: `src/App.tsx::decodeDisputeIdFromLeaderReceipt`. |
 | Contract-level rollback separated from wallet/signing/RPC failures | PASS | Pre-chain/RPC failures are hard FAILs and cannot satisfy finalized rollback-state assertions |
 
 ## Reviewer commands

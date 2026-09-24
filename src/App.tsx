@@ -38,47 +38,51 @@ function executionFailed(receipt: any) {
   );
 }
 
-function decodeHexUtf8(hex: string): string {
-  if (typeof hex !== 'string' || !/^0x[0-9a-fA-F]*$/.test(hex)) {
+function decodeDisputeIdFromLeaderReceipt(receipt: any): string {
+  /*
+   * genlayer-js decodes the accepted leader's GenVM result at this exact path.
+   * GenLayer's official Explorer uses the same field for its "Return Value".
+   *
+   * Never recursively inspect the receipt or transaction. They contain many
+   * unrelated numbers that must not be mistaken for the returned dispute ID.
+   */
+  const result = receipt?.consensus_data?.leader_receipt?.[0]?.result;
+
+  if (!result || typeof result !== 'object') {
     throw new Error(
-      `GenVM trace.return_data must be a hex string, received: ${String(hex)}`,
+      'create_dispute receipt is missing consensus_data.leader_receipt[0].result',
     );
   }
 
-  let body = hex.slice(2);
-  if (body.length % 2) body = `0${body}`;
-
-  const bytes = new Uint8Array(
-    body.match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) ?? [],
-  );
-
-  return new TextDecoder().decode(bytes).replace(/\0/g, '').trim();
-}
-
-function decodeDisputeIdFromReturnData(returnData: string): string {
-  /*
-   * The node documents debugTraceTransaction.return_data as the hex-encoded
-   * GenVM contract return. Decode ONLY that field.
-   *
-   * Never fall back to scanning the receipt or the transaction: both contain
-   * unrelated numeric fields, and a recursive search can silently return one
-   * of those values as the dispute ID.
-   */
-  const decoded = decodeHexUtf8(returnData);
-
-  const direct = decoded.match(/^\s*"?(\d+)"?\s*$/);
-  if (direct) return direct[1];
-
-  try {
-    const parsed = JSON.parse(decoded);
-    if (typeof parsed === 'string' && /^\d+$/.test(parsed)) return parsed;
-  } catch {
-    // Fall through to the hard error below.
+  if (result.status !== 'return') {
+    throw new Error(
+      `create_dispute leader result must be "return", observed ${String(result.status)}`,
+    );
   }
 
-  throw new Error(
-    `Could not decode dispute ID from documented GenVM trace.return_data: ${returnData}`,
-  );
+  const readable = result?.payload?.readable;
+  if (typeof readable !== 'string') {
+    throw new Error(
+      'create_dispute leader result is missing payload.readable',
+    );
+  }
+
+  let returned: unknown;
+  try {
+    returned = JSON.parse(readable);
+  } catch {
+    throw new Error(
+      `create_dispute returned malformed calldata: ${readable}`,
+    );
+  }
+
+  if (typeof returned !== 'string' || !/^[1-9]\d*$/.test(returned)) {
+    throw new Error(
+      `create_dispute returned a non-canonical dispute ID: ${readable}`,
+    );
+  }
+
+  return returned;
 }
 
 function App() {
@@ -102,7 +106,7 @@ function App() {
       : '/api/rpc';
 
   const readClient = useMemo(
-    () => createClient({ endpoint: proxyRpc }),
+    () => createClient({ chain: studionet, endpoint: proxyRpc }),
     [proxyRpc],
   );
 
@@ -261,29 +265,8 @@ function App() {
     );
   };
 
-  const deriveDisputeId = async (hash: `0x${string}`): Promise<string> => {
-    let trace: any;
-
-    try {
-      trace = await (readClient as any).debugTraceTransaction({ hash, round: 0 });
-    } catch (err: any) {
-      throw new Error(
-        `debugTraceTransaction RPC failure while reading create_dispute return: ${err?.message ?? err}`,
-      );
-    }
-
-    if (trace?.result_code !== 0) {
-      throw new Error(
-        `create_dispute GenVM result_code must be 0, observed ${String(trace?.result_code)}`,
-      );
-    }
-
-    if (typeof trace?.return_data !== 'string') {
-      throw new Error('create_dispute trace is missing documented return_data');
-    }
-
-    return decodeDisputeIdFromReturnData(trace.return_data);
-  };
+  const deriveDisputeId = (receipt: any): string =>
+    decodeDisputeIdFromLeaderReceipt(receipt);
 
   const ensureRoleClient = async (role: Role) => {
     const expected = role === 'HOST' ? hostAddress : guestAddress;
@@ -337,10 +320,8 @@ function App() {
 
       setSubmittedHash(hash);
       setStatusMsg(`📨 Submitted ${hash}. Waiting for FINALIZED...`);
-      // Finalization remains mandatory, but the receipt is not an ID source.
-      await waitFinalized(hash as `0x${string}`);
-
-      const returnedId = await deriveDisputeId(hash as `0x${string}`);
+      const receipt = await waitFinalized(hash as `0x${string}`);
+      const returnedId = deriveDisputeId(receipt);
 
       setDisputeId(returnedId);
       await fetchDispute(returnedId);

@@ -94,13 +94,34 @@ pass('runtime proof uses finalized parent messages, triggered child IDs, exact b
 pass('runtime test distinguishes pre-chain wallet/signing/RPC failures from the finalized rollback parent');
 pass('runtime test proves both committed transfers and atomic discard of both emitted transfers');
 
-const derive = extractFunction(flowTest, 'deriveDisputeId', 'getBalance');
-if (!derive.includes('trace?.return_data') || !derive.includes('trace.return_data')) {
-  fail('create_dispute ID decoder does not use documented GenVM trace.return_data');
+const idDecoder = extractFunction(
+  flowTest,
+  'decodeDisputeIdFromLeaderReceipt',
+  'deriveDisputeId',
+);
+if (
+  !idDecoder.includes(
+    'receipt?.consensus_data?.leader_receipt?.[0]?.result',
+  ) ||
+  !idDecoder.includes("result.status === 'return'") ||
+  !idDecoder.includes('result?.payload?.readable')
+) {
+  fail(
+    'create_dispute ID decoder must use only consensus_data.leader_receipt[0].result',
+  );
 }
-for (const forbidden of ['receipt?.result', 'receipt?.output', 'receipt?.returnValue', 'transaction?.result']) {
-  if (derive.includes(forbidden)) fail(`create_dispute ID decoder contains undocumented fallback: ${forbidden}`);
+for (const forbidden of [
+  'Object.values',
+  'findReturnedString',
+  'debugTraceTransaction',
+  'return_data',
+]) {
+  if (idDecoder.includes(forbidden)) {
+    fail(`create_dispute ID decoder contains an invalid fallback: ${forbidden}`);
+  }
 }
-pass('create_dispute ID decoding is restricted to documented GenVM trace.return_data');
+pass(
+  'create_dispute ID decoding is restricted to the accepted leader result used by the official Explorer',
+);
 
 console.log('\n✅ STEWARD NATIVE PAYOUT STATIC CHECK PASSED');

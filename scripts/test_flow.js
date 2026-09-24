@@ -200,80 +200,53 @@ async function readDispute(
   return JSON.parse(text);
 }
 
-function decodeHexUtf8(hex) {
-  assert(
-    typeof hex === 'string' && /^0x[0-9a-fA-F]*$/.test(hex),
-    'GenVM trace.return_data must be a hex string',
-  );
-
-  let body = hex.slice(2);
-
-  if (body.length % 2) {
-    body = `0${body}`;
-  }
-
-  return Buffer.from(body, 'hex')
-    .toString('utf8')
-    .replace(/\0/g, '')
-    .trim();
-}
-
-function decodeDisputeIdFromReturnData(returnData) {
+function decodeDisputeIdFromLeaderReceipt(receipt) {
   /*
-   * The node documents debugTraceTransaction.return_data as the
-   * hex-encoded GenVM contract return.  Decode ONLY that field; do not
-   * recursively guess receipt/result/output aliases.
+   * Decode only the accepted leader's exact result field. genlayer-js and the
+   * official Explorer expose the same Return Value from this path.
    */
-  const decoded = decodeHexUtf8(returnData);
-
-  const direct = decoded.match(/^\s*"?(\d+)"?\s*$/);
-  if (direct) {
-    return direct[1];
-  }
-
-  try {
-    const parsed = JSON.parse(decoded);
-    if (
-      typeof parsed === 'string' &&
-      /^\d+$/.test(parsed)
-    ) {
-      return parsed;
-    }
-  } catch {
-    // Assert below with the exact documented field value.
-  }
+  const result =
+    receipt?.consensus_data?.leader_receipt?.[0]?.result;
 
   assert(
-    false,
-    `Could not decode dispute ID from documented GenVM trace.return_data: ${returnData}`,
+    result && typeof result === 'object',
+    'create_dispute receipt is missing consensus_data.leader_receipt[0].result',
   );
-}
 
-async function deriveDisputeId(createHash) {
-  let trace;
+  assert(
+    result.status === 'return',
+    `create_dispute leader result must be "return", observed ${String(result.status)}`,
+  );
+
+  const readable = result?.payload?.readable;
+
+  assert(
+    typeof readable === 'string',
+    'create_dispute leader result is missing payload.readable',
+  );
+
+  let returned;
 
   try {
-    trace = await readClient.debugTraceTransaction({
-      hash: createHash,
-      round: 0,
-    });
-  } catch (err) {
-    throw new Error(
-      `debugTraceTransaction RPC failure while reading create_dispute return: ${err?.message ?? err}`,
+    returned = JSON.parse(readable);
+  } catch {
+    assert(
+      false,
+      `create_dispute returned malformed calldata: ${readable}`,
     );
   }
 
   assert(
-    trace?.result_code === 0,
-    `create_dispute GenVM result_code must be 0, observed ${String(trace?.result_code)}`,
+    typeof returned === 'string' &&
+      /^[1-9]\d*$/.test(returned),
+    `create_dispute returned a non-canonical dispute ID: ${readable}`,
   );
 
-  assert(
-    typeof trace?.return_data === 'string',
-    'create_dispute trace is missing documented return_data',
-  );
+  return returned;
+}
 
-  return decodeDisputeIdFromReturnData(trace.return_data);
+function deriveDisputeId(createReceipt) {
+  return decodeDisputeIdFromLeaderReceipt(createReceipt);
 }
 
 async function getBalance(address) {
@@ -331,23 +304,17 @@ async function assertTransactionReverts(
     `${label}: expected txExecutionResultName=${ExecutionResult.FINISHED_WITH_ERROR}, observed=${executionName(receipt)}`,
   );
 
-  let trace;
-
-  try {
-    trace = await readClient.debugTraceTransaction({
-      hash,
-      round: 0,
-    });
-  } catch (err) {
-    assert(
-      false,
-      `${label}: debugTraceTransaction RPC failure; cannot prove contract revert: ${err?.message ?? err}`,
-    );
-  }
+  const leaderResult =
+    receipt?.consensus_data?.leader_receipt?.[0]?.result;
 
   assert(
-    trace?.result_code === 1,
-    `${label}: expected documented GenVM result_code=1 (UserError), observed=${String(trace?.result_code)}`,
+    leaderResult && typeof leaderResult === 'object',
+    `${label}: finalized receipt is missing consensus_data.leader_receipt[0].result`,
+  );
+
+  assert(
+    leaderResult.status === 'rollback',
+    `${label}: expected accepted leader result status=rollback, observed=${String(leaderResult.status)}`,
   );
 
   console.log(
@@ -547,8 +514,8 @@ async function runTest() {
   );
 
   const disputeId =
-    await deriveDisputeId(
-      createHash,
+    deriveDisputeId(
+      createReceipt,
     );
 
   assert(
