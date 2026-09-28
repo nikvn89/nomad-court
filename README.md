@@ -8,6 +8,57 @@ The Intelligent Contract then deterministically converts the consensus result in
 
 ---
 
+## The web app
+
+The front end is a multi-page application. Every page reads the contract
+directly; nothing is seeded, mocked or hard-coded.
+
+| Route | Wallet needed | What it is |
+|---|---|---|
+| `/` | no | Public case explorer and live feed |
+| `/dispute/new` | yes | Guest files a case, agrees the rules, locks the bond |
+| `/dashboard` | yes | The cases your wallet is a party to, split by role |
+| `/dispute/:id` | no to read, yes to act | The case itself: evidence, consensus verdict, actions |
+
+### Your role is read from the contract
+
+There is no role switch and no persona to pick. Each case stores a `host` and a
+`guest` address; the app compares the connected wallet against those two fields
+and shows the matching view. Any other wallet, or none at all, sees the case as
+a visitor — and may still start adjudication once both sides have filed, because
+`resolve_dispute` does not restrict who calls it.
+
+### How to try it
+
+1. Open `/` with no wallet at all. Every case on the contract is listed, with the
+   bonds locked and the verdicts already handed down.
+2. Open any case to read both sides' evidence and, once settled, the split and
+   the validators' rationale.
+3. To file your own case, connect a wallet on `/dispute/new`. You name the other
+   party, agree the rules and choose a bond. You will need a second wallet to
+   play the host.
+
+You do not need anything that already exists on the contract: every reviewer
+creates their own case.
+
+---
+
+## Honest limitation
+
+- **Evidence is referenced by a public link, not stored on chain.** The contract
+  holds a URL string. There is no upload target and adding one would mean
+  changing the contract and redeploying it. The form instead validates the link
+  and explains what makes a link readable by the validators.
+- **House rules written by hand are published to a public paste service** so the
+  validators can fetch them, and the resulting link is what goes on chain. The
+  form says so before you submit.
+- **Anyone can start adjudication** once both sides have filed. That is the
+  contract's design, not an oversight in the app.
+- **The verdict is written by a model.** The contract converts it into a payout
+  deterministically, but the split itself is a judgement call.
+
+---
+
 ## Problem
 
 P2P marketplaces, rentals, and service platforms frequently face disputes that cannot be resolved with deterministic smart-contract rules alone.
