@@ -26,9 +26,23 @@ export function checkEvidenceUrl(value: string): UrlVerdict {
   if (!raw) {
     return { ok: false, warn: false, message: 'Paste a public link to your evidence.' };
   }
+
+  // Say "this is not a link" before "this has a space in it". Someone typing a
+  // sentence needs to know they need a link at all, not to delete the spaces
+  // and be refused a second time.
+  if (!raw.startsWith('https://') && !raw.startsWith('http://')) {
+    return {
+      ok: false,
+      warn: false,
+      message:
+        'Evidence must be a link starting with https:// — plain text is rejected on chain.',
+    };
+  }
+
   if (/\s/.test(raw)) {
     return { ok: false, warn: false, message: 'A link cannot contain spaces or line breaks.' };
   }
+
   if (raw.startsWith('https://')) {
     if (raw.length <= 'https://'.length) {
       return { ok: false, warn: false, message: 'That link is incomplete.' };
@@ -45,6 +59,7 @@ export function checkEvidenceUrl(value: string): UrlVerdict {
       message: 'This link is not encrypted. https:// is safer, but http:// is accepted.',
     };
   }
+  /* istanbul ignore next — every path above is exhaustive. */
   return {
     ok: false,
     warn: false,

@@ -31,7 +31,20 @@ describe('checkEvidenceUrl', () => {
   });
 
   it('rejects a link with whitespace in it', () => {
-    expect(checkEvidenceUrl('https://example.org/a b').ok).toBe(false);
+    const v = checkEvidenceUrl('https://example.org/a b');
+    expect(v.ok).toBe(false);
+    expect(v.message).toContain('spaces');
+  });
+
+  it('tells a user who typed a sentence that they need a link, not that they used spaces', () => {
+    const v = checkEvidenceUrl('the room was dirty');
+    expect(v.ok).toBe(false);
+    expect(v.message).toContain('must be a link');
+    expect(v.message).not.toContain('spaces');
+  });
+
+  it('says the same thing for text with no spaces at all', () => {
+    expect(checkEvidenceUrl('theroomwasdirty').message).toContain('must be a link');
   });
 
   it('rejects a bare scheme', () => {
