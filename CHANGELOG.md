@@ -74,3 +74,21 @@ is front end only.
   — including that a model-written rationale is escaped.
 - Split `genlayer-js` into its own chunk: application code dropped from 695 kB to
   200 kB.
+
+### Runtime evidence
+
+- Ran the whole lifecycle on the deployed contract as case #6 with three wallets:
+  `create_dispute` → guest `submit_evidence` → host `submit_evidence` →
+  `resolve_dispute`, all four `SUCCESS` and `FINALIZED`. Adjudication was signed
+  by a wallet that is neither party, which the page labelled an observer.
+  Transactions and observed state are in
+  [docs/FRONTEND_RUNTIME_EVIDENCE.md](docs/FRONTEND_RUNTIME_EVIDENCE.md).
+- Both refusals were checked at the form with no transaction sent: a host equal
+  to the connected wallet, and plain text in the evidence field.
+
+### Follow-up fix
+
+- The evidence field used to answer plain text with "A link cannot contain
+  spaces or line breaks", which sent the user to delete the spaces and be
+  refused a second time. It now says the input is not a link at all. Two tests
+  cover both spellings.
