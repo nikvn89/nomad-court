@@ -29,7 +29,7 @@ listed every case on the contract and computed its own totals from those reads:
 settled case showed both evidence links, the split and the rationale.
 
 This is the read-only client: it carries no provider, so the explorer is
-readable by anyone.
+readable by anyone. — [`evidence/01-explorer-public.png`](evidence/01-explorer-public.png)
 
 ## B. Wallet connection
 
@@ -38,6 +38,7 @@ control showed the truncated address and a StudioNet badge, and **no
 `wallet_getSnaps` request was made** — the `client.connect()` call that produced
 `method [wallet_getSnaps] doesn't has corresponding handler` is gone, replaced by
 `wallet_switchEthereumChain` with a `wallet_addEthereumChain` fallback.
+— [`evidence/02-connect-ok.png`](evidence/02-connect-ok.png)
 
 ## C. Validation before signing
 
@@ -47,6 +48,8 @@ Two inputs were refused at the form, with no transaction sent in either case:
 |---|---|---|
 | Host address = the connected wallet | `Host and Guest must be different accounts.` | `Host and Guest must be different accounts` |
 | Evidence = `the room was dirty` | `Evidence must be a link starting with https:// — plain text is rejected on chain.` | `Evidence must be a public HTTP/HTTPS URL` |
+
+— [`evidence/05-form-blocked-host-is-self.png`](evidence/05-form-blocked-host-is-self.png)
 
 ## D. Roles read from contract state
 
@@ -60,9 +63,14 @@ recorded `host` and `guest`.
 | `0x146e…ec8e` | You are viewing this as **host** | next to Host |
 | `0x037f…1cde` | You are viewing this as **observer** | nowhere |
 
+— [`evidence/03-role-auto-guest.png`](evidence/03-role-auto-guest.png) and
+[`evidence/04-role-auto-host.png`](evidence/04-role-auto-host.png) are the same case at the
+same URL, one wallet apart.
+
 On case #1, where the connected wallet is neither party, the evidence field was
 disabled and carried the contract's own sentence,
 `Only the recorded Host or Guest can submit evidence`.
+— [`evidence/06-role-auto-observer.png`](evidence/06-role-auto-observer.png)
 
 ## E. Full lifecycle, case #6
 
@@ -83,7 +91,7 @@ it.
 Step 4 was signed by a wallet that is neither host nor guest. The page labelled
 it an observer and still allowed adjudication, because `resolve_dispute` does not
 restrict its caller. That is the contract's design, and the app now reflects it
-instead of hiding it.
+instead of hiding it. — [`evidence/07-observer-can-adjudicate.png`](evidence/07-observer-can-adjudicate.png)
 
 ### Evidence submitted
 
@@ -99,6 +107,9 @@ The equivalence-principle output on transaction 4:
 ```
 
 The page then showed 100% guest / 0% host, 10 GEN / 0 GEN, and that rationale.
+— [`evidence/08-verdict-settled.png`](evidence/08-verdict-settled.png)
+
+Every screenshot is listed in [evidence/README.md](evidence/README.md).
 
 ## What this run does NOT prove
 
